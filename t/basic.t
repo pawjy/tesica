@@ -6,6 +6,7 @@ use Test::More;
 use Test::X1;
 use File::Temp;
 use Promised::Command;
+use JSON::PS;
 
 test {
   my $c = shift;
@@ -27,7 +28,10 @@ test {
     my $result = $_[0];
     die $result unless $result->exit_code == 0;
     test {
-      ok 1;
+      my $result_path = $temp_path->child ('local/test/result.json');
+      my $result = json_bytes2perl $result_path->slurp;
+      is $result->{result}->{exit_code}, 0;
+      is $result->{result}->{json_file}, $result_path->absolute->stringify;
     } $c;
   })->catch (sub {
     my $e = $_[0];
@@ -40,7 +44,7 @@ test {
     undef $c;
     undef $temp;
   });
-} n => 1, name => 'No arguments, empty directory';
+} n => 2, name => 'No arguments, empty directory';
 
 run_tests;
 

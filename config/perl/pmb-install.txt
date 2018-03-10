@@ -1,6 +1,7 @@
 AnyEvent::IO
 Carp~1.38
 Cwd~3.74
+Encode~2.97
 File::Path~2.15
 File::Temp~0.2304
 Filter::Util::Call~1.58
