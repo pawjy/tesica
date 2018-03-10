@@ -1,23 +1,80 @@
 use strict;
 use warnings;
 use Path::Tiny;
+use Promise;
+use Promised::Flow;
 use Promised::File;
 use JSON::PS;
 
+sub _files ($$$$$);
+sub _files ($$$$$) {
+  my ($base, $names, $name_pattern, $next_name_pattern, $files) = @_;
+  return promised_for {
+    my $name = $_[0];
+    my $path = path ($name)->absolute ($base);
+    my $file = Promised::File->new_from_path ($path);
+    return $file->is_file->then (sub {
+      if ($_[0]) {
+        push @$files, $path if $name =~ /$name_pattern/;
+      } else {
+        return $file->is_directory->then (sub {
+          if ($_[0]) {
+            return $file->get_child_names->then (sub {
+              return _files $path, [sort { $a cmp $b } @{$_[0]}], $next_name_pattern, $next_name_pattern, $files;
+            });
+          } else {
+            die "|$path| is not a test script\n";
+          }
+        });
+      }
+    });
+  } $names;
+} # _files
+
+sub expand_files ($) {
+  my $rule = $_[0];
+
+  unless (defined $rule->{files} and
+          ref $rule->{files} eq 'ARRAY') {
+    $rule->{files} = ['t'];
+  }
+
+  my $files = [];
+  return _files ($rule->{base_dir}, $rule->{files}, qr/./, qr/\.t\z/, $files)->then (sub {
+    return $files;
+  });
+} # expand_files
+
 sub main () {
-  my $rule = {
-    type => 'perl',
-    result_json_file => 'local/test/result.json',
-  };
+  my $rule;
+  my $result = {result => {exit_code => 1}};
+  return Promise->resolve->then (sub {
+    $rule = {
+      type => 'perl',
+      result_json_file => 'local/test/result.json',
+    };
+    $rule->{base_dir} = '.' unless defined $rule->{base_dir};
+    $result->{rule}->{base_dir} = path ($rule->{base_dir})->absolute;
+    $result->{rule}->{type} = $rule->{type};
+    my $result_json_path = path ($rule->{result_json_file})->absolute
+        ($result->{rule}->{base_dir});
+    $result->{result}->{json_file} = $result_json_path->absolute;
 
-  my $result = {};
-  $result->{rule}->{type} = $rule->{type};
-  $result->{result}->{exit_code} = 0;
-
-  my $result_json_path = path ($rule->{result_json_file});
-  $result->{result}->{json_file} = $result_json_path->absolute;
-  my $result_json_file = Promised::File->new_from_path ($result_json_path);
-  return $result_json_file->write_byte_string (perl2json_bytes $result)->then (sub {
+    return expand_files $rule;
+  })->then (sub {
+    $result->{files} = $_[0];
+    
+    $result->{result}->{exit_code} = 0;
+  })->catch (sub {
+    my $error = $_[0];
+    $result->{result}->{error} = '' . $error;
+    $result->{result}->{exit_code} = 1;
+    warn "ERROR: $error\n";
+  })->then (sub {
+    my $result_json_file = Promised::File->new_from_path
+        ($result->{result}->{json_file});
+    return $result_json_file->write_byte_string (perl2json_bytes $result);
+  })->then (sub {
     return $result;
   });
 } # main
@@ -33,6 +90,15 @@ tesica
 
   $ tesica
 
+=head1 TESTING
+
+The B<base directory> is the current directory.
+
+A B<test script> is a file containing a set of tests.  The files whose
+name ends by C<.t> contained directly or indirectly, without following
+symlinks, in the C<t> directory under the base directory are the test
+scripts to be used.
+
 =head1 RESULT FILE
 
 The result is written to the C<local/test/result.json>, which is a
@@ -41,6 +107,24 @@ JSON file of a JSON object with following name/value pairs:
 =over 4
 
 =item rule
+
+A JSON object with following name/value pairs:
+
+=over 4
+
+=item type
+
+A string C<perl>.
+
+=item base_dir
+
+The absolute path of the base directory.
+
+=back
+
+=item files
+
+A JSON array of absolute paths of the test scripts.
 
 =item result
 
