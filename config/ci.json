@@ -1,0 +1,6 @@
+{
+  "travisci": {
+    "pmbp": "5.14+",
+    "merger": true
+  }
+}
