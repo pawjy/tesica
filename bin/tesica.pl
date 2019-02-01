@@ -1,6 +1,7 @@
 use strict;
 use warnings;
 use Path::Tiny;
+use Time::HiRes qw(time);
 use Promise;
 use Promised::Flow;
 use Promised::File;
@@ -47,7 +48,7 @@ sub expand_files ($) {
 
 sub main () {
   my $rule;
-  my $result = {result => {exit_code => 1}};
+  my $result = {result => {exit_code => 1}, times => {start => time}};
   return Promise->resolve->then (sub {
     $rule = {
       type => 'perl',
@@ -71,6 +72,7 @@ sub main () {
     $result->{result}->{exit_code} = 1;
     warn "ERROR: $error\n";
   })->then (sub {
+    $result->{times}->{end} = time;
     my $result_json_file = Promised::File->new_from_path
         ($result->{result}->{json_file});
     return $result_json_file->write_byte_string (perl2json_bytes $result);

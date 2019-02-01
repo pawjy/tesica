@@ -150,9 +150,12 @@ for (
         is $json->{rule}->{type}, 'perl';
         is join ($;, @{$json->{files}}),
            join ($;, map { $return->{base_path}->child ($_)->absolute->stringify } @$expected);
+        ok $json->{times}->{start};
+        ok $json->{times}->{end};
+        ok $json->{times}->{start} < $json->{times}->{end};
       } $c;
     });
-  } n => 4, name => ['files', @$expected];
+  } n => 7, name => ['files', @$expected];
 }
 
 run_tests;
