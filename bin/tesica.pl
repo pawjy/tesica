@@ -5,6 +5,7 @@ use Time::HiRes qw(time);
 use Promise;
 use Promised::Flow;
 use Promised::File;
+use Promised::Command;
 use JSON::PS;
 
 sub _files ($$$$$);
@@ -46,9 +47,49 @@ sub expand_files ($) {
   });
 } # expand_files
 
+sub process_files ($) {
+  my $result = $_[0];
+
+  return promised_for {
+    my $file_name = shift;
+    my $path = path ($file_name);
+
+    # XXX
+    warn $path, "...\n";
+
+    my $cmd = Promised::Command->new ([ # XXX
+      'perl',
+      $path,
+    ]);
+
+    my $fr = $result->{file_results}->{$file_name} = {
+      result => {ok => 0},
+      times => {start => time},
+    };
+    return $cmd->run->then (sub {
+      return $cmd->wait;
+    })->then (sub {
+      my $cr = $_[0];
+      $fr->{times}->{end} = time;
+      $fr->{result}->{exit_code} = $cr->exit_code;
+      die $cr unless $cr->exit_code == 0;
+      $fr->{result}->{ok} = 1;
+      $result->{result}->{pass}++;
+      warn "PASS $path\n";
+    })->catch (sub {
+      my $e = $_[0];
+      $fr->{error}->{message} = ''.$e;
+      warn "FAIL $path\n";
+      $result->{result}->{fail}++;
+    });
+  } $result->{files};
+} # process_files
+
 sub main () {
   my $rule;
-  my $result = {result => {exit_code => 1}, times => {start => time}};
+  my $result = {result => {exit_code => 1, pass => 0, fail => 0},
+                times => {start => time},
+                file_results => {}};
   return Promise->resolve->then (sub {
     $rule = {
       type => 'perl',
@@ -64,8 +105,13 @@ sub main () {
     return expand_files $rule;
   })->then (sub {
     $result->{files} = $_[0];
-    
-    $result->{result}->{exit_code} = 0;
+    return process_files $result;
+  })->then (sub {
+    if ($result->{result}->{fail}) {
+      #$result->{result}->{exit_code} = 1;
+    } else {
+      $result->{result}->{exit_code} = 0;
+    }
   })->catch (sub {
     my $error = $_[0];
     $result->{result}->{error} = '' . $error;

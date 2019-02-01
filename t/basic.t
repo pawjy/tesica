@@ -31,10 +31,18 @@ sub run (%) {
       my $name = $_[0];
       my $path = $temp_path->child ($name);
       my $file = Promised::File->new_from_path ($path);
-      my $data = '';
       my $def = $files->{$name};
-      if ($def->{perl_test}) {
-        
+      my $data = '';
+      if (defined $def->{bytes}) {
+        $data = $def->{bytes};
+      } elsif ($def->{perl_test}) {
+        if ($def->{perl_test} eq 'ok') {
+          $data = 'exit 0';
+        } elsif ($def->{perl_test} eq 'ng') {
+          $data = 'exit 1';
+        } else {
+          #
+        }
       }
       return $file->write_byte_string ($data);
     } [keys %$files];
@@ -157,6 +165,81 @@ for (
     });
   } n => 7, name => ['files', @$expected];
 }
+
+Test {
+  my $c = shift;
+  return run (
+    files => {
+      't/abc.t' => {perl_test => 'ok'},
+    },
+  )->then (sub {
+    my $return = $_[0];
+    test {
+      my $json = $return->{json};
+      is $return->{result}->exit_code, $json->{result}->{exit_code};
+      is $json->{result}->{exit_code}, 0;
+      is $json->{result}->{pass}, 1, 'result.pass';
+      is $json->{result}->{fail}, 0, 'result.fail';
+      is $json->{file_results}->{path('t/abc.t')->absolute($json->{rule}->{base_dir})}->{result}->{exit_code}, 0;
+      is $json->{file_results}->{path('t/abc.t')->absolute($json->{rule}->{base_dir})}->{result}->{ok}, 1;
+      is $json->{file_results}->{path('t/abc.t')->absolute($json->{rule}->{base_dir})}->{error}, undef;
+    } $c;
+  });
+} n => 7, name => ['success'];
+
+Test {
+  my $c = shift;
+  return run (
+    files => {
+      't/abc.t' => {perl_test => 'ok'},
+      't/def.t' => {perl_test => 'ng'},
+    },
+  )->then (sub {
+    my $return = $_[0];
+    test {
+      my $json = $return->{json};
+      is $return->{result}->exit_code, $json->{result}->{exit_code};
+      is $json->{result}->{exit_code}, 1;
+      is $json->{result}->{pass}, 1, 'result.pass';
+      is $json->{result}->{fail}, 1, 'result.fail';
+      
+      is $json->{file_results}->{path('t/abc.t')->absolute($json->{rule}->{base_dir})}->{result}->{exit_code}, 0;
+      is $json->{file_results}->{path('t/abc.t')->absolute($json->{rule}->{base_dir})}->{result}->{ok}, 1;
+      is $json->{file_results}->{path('t/abc.t')->absolute($json->{rule}->{base_dir})}->{error}, undef;
+      
+      is $json->{file_results}->{path('t/def.t')->absolute($json->{rule}->{base_dir})}->{result}->{exit_code}, 1;
+      ok ! $json->{file_results}->{path('t/def.t')->absolute($json->{rule}->{base_dir})}->{result}->{ok};
+      is $json->{file_results}->{path('t/def.t')->absolute($json->{rule}->{base_dir})}->{error}->{message}, 'Exit code 1';
+    } $c;
+  });
+} n => 10, name => ['success and failure'];
+
+Test {
+  my $c = shift;
+  return run (
+    files => {
+      't/abc.t' => {bytes => 'exit 2'},
+      't/def.t' => {perl_test => 'ng'},
+    },
+  )->then (sub {
+    my $return = $_[0];
+    test {
+      my $json = $return->{json};
+      is $return->{result}->exit_code, $json->{result}->{exit_code};
+      is $json->{result}->{exit_code}, 1;
+      is $json->{result}->{pass}, 0, 'result.pass';
+      is $json->{result}->{fail}, 2, 'result.fail';
+      
+      is $json->{file_results}->{path('t/abc.t')->absolute($json->{rule}->{base_dir})}->{result}->{exit_code}, 2;
+      ok ! $json->{file_results}->{path('t/abc.t')->absolute($json->{rule}->{base_dir})}->{result}->{ok};
+      is $json->{file_results}->{path('t/abc.t')->absolute($json->{rule}->{base_dir})}->{error}->{message}, 'Exit code 2';
+      
+      is $json->{file_results}->{path('t/def.t')->absolute($json->{rule}->{base_dir})}->{result}->{exit_code}, 1;
+      ok ! $json->{file_results}->{path('t/def.t')->absolute($json->{rule}->{base_dir})}->{result}->{ok};
+      is $json->{file_results}->{path('t/def.t')->absolute($json->{rule}->{base_dir})}->{error}->{message}, 'Exit code 1';
+    } $c;
+  });
+} n => 10, name => ['fails'];
 
 run_tests;
 
