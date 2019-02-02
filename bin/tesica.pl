@@ -2,6 +2,8 @@ use strict;
 use warnings;
 use Path::Tiny;
 use Time::HiRes qw(time);
+use ArrayBuffer;
+use DataView;
 use Promise;
 use Promised::Flow;
 use Promised::File;
@@ -66,6 +68,34 @@ sub process_files ($$$) {
       result => {ok => 0},
       times => {start => time},
     };
+    my $escaped_name = $file_name;
+    $escaped_name =~ s{([^A-Za-z0-9])}{sprintf '_%02X', ord $1}ge;
+    my $output_path = $base_dir_path->child ('local/test/files')
+        ->child ($escaped_name . '.txt');
+    $fr->{output_file} = $output_path->relative ($base_dir_path);
+    my $output_ws = Promised::File->new_from_path ($output_path)->write_bytes;
+    my $output_w = $output_ws->get_writer;
+    my $so_rs = $cmd->get_stdout_stream;
+    my $so_r = $so_rs->get_reader ('byob');
+    promised_until {
+      return $so_r->read (DataView->new (ArrayBuffer->new (1024)))->then (sub {
+        return 'done' if $_[0]->{done};
+        return $output_w->write ($_[0]->{value})->then (sub {
+          return not 'done';
+        });
+      });
+    };
+    my $se_rs = $cmd->get_stderr_stream;
+    my $se_r = $se_rs->get_reader ('byob');
+    promised_until {
+      return $se_r->read (DataView->new (ArrayBuffer->new (1024)))->then (sub {
+        return 'done' if $_[0]->{done};
+        return $output_w->write ($_[0]->{value})->then (sub {
+          return not 'done';
+        });
+      });
+    };
+    # XXX stdout/stderr line boundaries
     return $cmd->run->then (sub {
       return $cmd->wait;
     })->then (sub {
@@ -81,6 +111,8 @@ sub process_files ($$$) {
       $fr->{error}->{message} = ''.$e;
       warn "FAIL $file_name\n";
       $result->{result}->{fail}++;
+    })->finally (sub {
+      return $output_w->close;
     });
   } $file_paths;
 } # process_files
@@ -192,13 +224,14 @@ The timestamps of the process of the test script.
 
 =item result : Result
 
-The result of the process of the test script.
+The result of the process of the test script, referred to as "file
+result".
 
 =back
 
 =item result : Result
 
-The result of the entire test.
+The result of the entire test, referred to as "global result".
 
 =back
 
@@ -268,7 +301,7 @@ name/value pairs:
 
 =over 4
 
-=item exit_code
+=item exit_code : Integer
 
 The exit code of the process.  The exit code of the Unix process, if
 the process is a Unix process.  E.g. zero if there is no problem
@@ -278,13 +311,19 @@ detected.
 
 The number of the failed tests within the process, if known.
 
-=item json_file : Path
+=item json_file : Path (global result only)
 
-The path to the result JSON file, if any.
+The path to the result JSON file.
 
 =item ok : Boolean
 
 Whether the process is success or not.
+
+=item output_file : Path (file result only)
+
+The path to the output file, which contains standard output and
+standard error output of the test script.  The output file is stored
+under the C<local/test/files> directory within the base directory.
 
 =item pass : Integer?
 

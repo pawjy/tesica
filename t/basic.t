@@ -55,6 +55,9 @@ sub run (%) {
     my $return = {
       result => $result,
       base_path => $temp_path, _temp => $temp,
+      file_bytes => sub {
+        return path ($_[0])->absolute ($temp_path)->slurp;
+      },
     };
     
     my $json_path = $temp_path->child ('local/test/result.json');
@@ -240,6 +243,27 @@ Test {
     } $c;
   });
 } n => 10, name => ['fails'];
+
+Test {
+  my $c = shift;
+  return run (
+    files => {
+      't/abc.t' => {bytes => 'print STDOUT "abc\x0A"'},
+      't/def.t' => {bytes => 'print STDERR "xyz\x0AAAA"'},
+    },
+  )->then (sub {
+    my $return = $_[0];
+    test {
+      my $json = $return->{json};
+      is $json->{file_results}->{'t/abc.t'}->{output_file},
+          'local/test/files/t_2Fabc_2Et.txt';
+      is $json->{file_results}->{'t/def.t'}->{output_file},
+          'local/test/files/t_2Fdef_2Et.txt';
+      is $return->{file_bytes}->('local/test/files/t_2Fabc_2Et.txt'), "abc\x0A";
+      is $return->{file_bytes}->('local/test/files/t_2Fdef_2Et.txt'), "xyz\x0AAAA";
+    } $c;
+  });
+} n => 4, name => ['test output result files'];
 
 run_tests;
 
