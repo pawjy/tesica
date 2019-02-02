@@ -47,15 +47,15 @@ sub expand_files ($) {
   });
 } # expand_files
 
-sub process_files ($) {
-  my $result = $_[0];
+sub process_files ($$$) {
+  my ($base_dir_path, $file_paths, $result) = @_;
 
   return promised_for {
-    my $file_name = shift;
-    my $path = path ($file_name);
+    my $path = shift;
+    my $file_name = $path->relative ($base_dir_path);
 
     # XXX
-    warn $path, "...\n";
+    warn "$file_name...\n";
 
     my $cmd = Promised::Command->new ([ # XXX
       'perl',
@@ -75,14 +75,14 @@ sub process_files ($) {
       die $cr unless $cr->exit_code == 0;
       $fr->{result}->{ok} = 1;
       $result->{result}->{pass}++;
-      warn "PASS $path\n";
+      warn "PASS $file_name\n";
     })->catch (sub {
       my $e = $_[0];
       $fr->{error}->{message} = ''.$e;
-      warn "FAIL $path\n";
+      warn "FAIL $file_name\n";
       $result->{result}->{fail}++;
     });
-  } $result->{files};
+  } $file_paths;
 } # process_files
 
 sub main () {
@@ -90,28 +90,33 @@ sub main () {
   my $result = {result => {exit_code => 1, pass => 0, fail => 0},
                 times => {start => time},
                 file_results => {}};
+  my $base_dir_path;
   return Promise->resolve->then (sub {
     $rule = {
       type => 'perl',
       result_json_file => 'local/test/result.json',
     };
     $rule->{base_dir} = '.' unless defined $rule->{base_dir};
-    $result->{rule}->{base_dir} = path ($rule->{base_dir})->absolute;
+    $base_dir_path = path ($rule->{base_dir})->absolute;
+    $result->{rule}->{base_dir} = '' . $base_dir_path;
     $result->{rule}->{type} = $rule->{type};
-    my $result_json_path = path ($rule->{result_json_file})->absolute
-        ($result->{rule}->{base_dir});
-    $result->{result}->{json_file} = $result_json_path->absolute;
+    my $result_json_path = path ($rule->{result_json_file})->absolute ($base_dir_path);
+    $result->{result}->{json_file} = $result_json_path->relative ($base_dir_path);
 
     return expand_files $rule;
   })->then (sub {
-    $result->{files} = $_[0];
-    return process_files $result;
+    my $files = $_[0];
+    $result->{files} = [map {
+      $_->relative ($base_dir_path);
+    } @$files];
+    return process_files $base_dir_path, $files => $result;
   })->then (sub {
     if ($result->{result}->{fail}) {
       #$result->{result}->{exit_code} = 1;
     } else {
       $result->{result}->{exit_code} = 0;
     }
+    # XXX ok
   })->catch (sub {
     my $error = $_[0];
     $result->{result}->{error} = '' . $error;
@@ -164,31 +169,129 @@ A JSON object with following name/value pairs:
 
 A string C<perl>.
 
-=item base_dir
+=item base_dir : String
 
 The absolute path of the base directory.
 
 =back
 
-=item files
+=item files : Array<Path>
 
-A JSON array of absolute paths of the test scripts.
+A JSON array of the paths of the test scripts.
 
-=item result
+=item file_results : Object<Path, Object>
 
-A JSON object with following name/value pairs:
+A JSON object whose names are the paths of the test scripts and values
+are corresponding results, with following name/value pairs:
+
+=over 4
+
+=item times : Times
+
+The timestamps of the process of the test script.
+
+=item result : Result
+
+The result of the process of the test script.
+
+=back
+
+=item result : Result
+
+The result of the entire test.
+
+=back
+
+=head2 Data types
+
+The data types used to describe result file content are as follows:
+
+=over 4
+
+=item Array<I<T>>
+
+A JSON array whose members are of I<T>.
+
+=item Boolean
+
+A boolean value.  False is represented by one of: a JSON number 0, an
+empty String, a JSON false value, a JSON null value, or omission of
+the name/value pair if the context is the value of a name/value pair
+of an Object.  True is represented by a non-false value.
+
+=item Integer
+
+A JSON number representing an integer value.
+
+=item Object
+
+A JSON object.
+
+=item Object<I<T>, I<U>>
+
+A JSON object whose names are of I<T> and values are of I<U>.
+
+=item Path
+
+A String representing a Unix-style file or directory path, which can
+be resolved relative to the |rule|'s |base_dir|.
+
+=item String
+
+A JSON string or a number representing its string value.
+
+=item Times
+
+An Object representing timestamps related to a process, with following
+name/value pairs:
+
+=over 4
+
+=item end : Timestamp
+
+The end time of the process.
+
+=item start : Timestamp
+
+The start time of the process.
+
+=back
+
+=item Timestamp
+
+A JSON number representing a Unix time.
+
+=item Result
+
+An Object representing a result of the process, with following
+name/value pairs:
 
 =over 4
 
 =item exit_code
 
-The exit code of the testing.  Zero if there is no problem detected.
+The exit code of the process.  The exit code of the Unix process, if
+the process is a Unix process.  E.g. zero if there is no problem
+detected.
 
-=item json_file
+=item fail : Integer?
 
-The absolute path to the result JSON file.
+The number of the failed tests within the process, if known.
+
+=item json_file : Path
+
+The path to the result JSON file, if any.
+
+=item ok : Boolean
+
+Whether the process is success or not.
+
+=item pass : Integer?
+
+The number of the passed tests within the process, if known.
 
 =back
+
 
 =back
 

@@ -100,9 +100,9 @@ Test {
       is $json->{rule}->{type}, 'perl';
       is $json->{rule}->{base_dir}, $return->{base_path}->absolute->stringify;
       is $json->{result}->{exit_code}, 0;
-      is $json->{result}->{json_file}, $return->{base_path}->child ('local/test/result.json')->absolute->stringify;
+      is $json->{result}->{json_file}, 'local/test/result.json';
       is 0+@{$json->{files}}, 1;
-      is $json->{files}->[0], $return->{base_path}->child ('t/abc.t')->absolute->stringify;
+      is $json->{files}->[0], 't/abc.t';
     } $c;
   });
 } n => 7, name => 'No arguments';
@@ -157,7 +157,7 @@ for (
         is $json->{result}->{exit_code}, 0;
         is $json->{rule}->{type}, 'perl';
         is join ($;, @{$json->{files}}),
-           join ($;, map { $return->{base_path}->child ($_)->absolute->stringify } @$expected);
+           join ($;, @$expected);
         ok $json->{times}->{start};
         ok $json->{times}->{end};
         ok $json->{times}->{start} < $json->{times}->{end};
@@ -180,9 +180,9 @@ Test {
       is $json->{result}->{exit_code}, 0;
       is $json->{result}->{pass}, 1, 'result.pass';
       is $json->{result}->{fail}, 0, 'result.fail';
-      is $json->{file_results}->{path('t/abc.t')->absolute($json->{rule}->{base_dir})}->{result}->{exit_code}, 0;
-      is $json->{file_results}->{path('t/abc.t')->absolute($json->{rule}->{base_dir})}->{result}->{ok}, 1;
-      is $json->{file_results}->{path('t/abc.t')->absolute($json->{rule}->{base_dir})}->{error}, undef;
+      is $json->{file_results}->{'t/abc.t'}->{result}->{exit_code}, 0;
+      is $json->{file_results}->{'t/abc.t'}->{result}->{ok}, 1;
+      is $json->{file_results}->{'t/abc.t'}->{error}, undef;
     } $c;
   });
 } n => 7, name => ['success'];
@@ -203,13 +203,13 @@ Test {
       is $json->{result}->{pass}, 1, 'result.pass';
       is $json->{result}->{fail}, 1, 'result.fail';
       
-      is $json->{file_results}->{path('t/abc.t')->absolute($json->{rule}->{base_dir})}->{result}->{exit_code}, 0;
-      is $json->{file_results}->{path('t/abc.t')->absolute($json->{rule}->{base_dir})}->{result}->{ok}, 1;
-      is $json->{file_results}->{path('t/abc.t')->absolute($json->{rule}->{base_dir})}->{error}, undef;
+      is $json->{file_results}->{'t/abc.t'}->{result}->{exit_code}, 0;
+      is $json->{file_results}->{'t/abc.t'}->{result}->{ok}, 1;
+      is $json->{file_results}->{'t/abc.t'}->{error}, undef;
       
-      is $json->{file_results}->{path('t/def.t')->absolute($json->{rule}->{base_dir})}->{result}->{exit_code}, 1;
-      ok ! $json->{file_results}->{path('t/def.t')->absolute($json->{rule}->{base_dir})}->{result}->{ok};
-      is $json->{file_results}->{path('t/def.t')->absolute($json->{rule}->{base_dir})}->{error}->{message}, 'Exit code 1';
+      is $json->{file_results}->{'t/def.t'}->{result}->{exit_code}, 1;
+      ok ! $json->{file_results}->{'t/def.t'}->{result}->{ok};
+      is $json->{file_results}->{'t/def.t'}->{error}->{message}, 'Exit code 1';
     } $c;
   });
 } n => 10, name => ['success and failure'];
@@ -230,13 +230,13 @@ Test {
       is $json->{result}->{pass}, 0, 'result.pass';
       is $json->{result}->{fail}, 2, 'result.fail';
       
-      is $json->{file_results}->{path('t/abc.t')->absolute($json->{rule}->{base_dir})}->{result}->{exit_code}, 2;
-      ok ! $json->{file_results}->{path('t/abc.t')->absolute($json->{rule}->{base_dir})}->{result}->{ok};
-      is $json->{file_results}->{path('t/abc.t')->absolute($json->{rule}->{base_dir})}->{error}->{message}, 'Exit code 2';
+      is $json->{file_results}->{'t/abc.t'}->{result}->{exit_code}, 2;
+      ok ! $json->{file_results}->{'t/abc.t'}->{result}->{ok};
+      is $json->{file_results}->{'t/abc.t'}->{error}->{message}, 'Exit code 2';
       
-      is $json->{file_results}->{path('t/def.t')->absolute($json->{rule}->{base_dir})}->{result}->{exit_code}, 1;
-      ok ! $json->{file_results}->{path('t/def.t')->absolute($json->{rule}->{base_dir})}->{result}->{ok};
-      is $json->{file_results}->{path('t/def.t')->absolute($json->{rule}->{base_dir})}->{error}->{message}, 'Exit code 1';
+      is $json->{file_results}->{'t/def.t'}->{result}->{exit_code}, 1;
+      ok ! $json->{file_results}->{'t/def.t'}->{result}->{ok};
+      is $json->{file_results}->{'t/def.t'}->{error}->{message}, 'Exit code 1';
     } $c;
   });
 } n => 10, name => ['fails'];
@@ -245,7 +245,7 @@ run_tests;
 
 =head1 LICENSE
 
-Copyright 2018 Wakaba <wakaba@suikawiki.org>.
+Copyright 2018-2019 Wakaba <wakaba@suikawiki.org>.
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself.
