@@ -186,9 +186,11 @@ Test {
       is $json->{file_results}->{'t/abc.t'}->{result}->{exit_code}, 0;
       is $json->{file_results}->{'t/abc.t'}->{result}->{ok}, 1;
       is $json->{file_results}->{'t/abc.t'}->{error}, undef;
+
+      ok $json->{result}->{ok};
     } $c;
   });
-} n => 7, name => ['success'];
+} n => 8, name => ['success'];
 
 Test {
   my $c = shift;
@@ -213,9 +215,11 @@ Test {
       is $json->{file_results}->{'t/def.t'}->{result}->{exit_code}, 1;
       ok ! $json->{file_results}->{'t/def.t'}->{result}->{ok};
       is $json->{file_results}->{'t/def.t'}->{error}->{message}, 'Exit code 1';
+
+      ok ! $json->{result}->{ok};
     } $c;
   });
-} n => 10, name => ['success and failure'];
+} n => 11, name => ['success and failure'];
 
 Test {
   my $c = shift;
@@ -240,9 +244,11 @@ Test {
       is $json->{file_results}->{'t/def.t'}->{result}->{exit_code}, 1;
       ok ! $json->{file_results}->{'t/def.t'}->{result}->{ok};
       is $json->{file_results}->{'t/def.t'}->{error}->{message}, 'Exit code 1';
+
+      ok ! $json->{result}->{ok};
     } $c;
   });
-} n => 10, name => ['fails'];
+} n => 11, name => ['fails'];
 
 Test {
   my $c = shift;

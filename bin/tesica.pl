@@ -57,7 +57,7 @@ sub process_files ($$$) {
     my $file_name = $path->relative ($base_dir_path);
 
     # XXX
-    warn "$file_name...\n";
+    print STDERR "$file_name...";
 
     my $cmd = Promised::Command->new ([ # XXX
       'perl',
@@ -80,6 +80,7 @@ sub process_files ($$$) {
     promised_until {
       return $so_r->read (DataView->new (ArrayBuffer->new (1024)))->then (sub {
         return 'done' if $_[0]->{done};
+        print STDERR ".";
         return $output_w->write ($_[0]->{value})->then (sub {
           return not 'done';
         });
@@ -90,6 +91,7 @@ sub process_files ($$$) {
     promised_until {
       return $se_r->read (DataView->new (ArrayBuffer->new (1024)))->then (sub {
         return 'done' if $_[0]->{done};
+        print STDERR ".";
         return $output_w->write ($_[0]->{value})->then (sub {
           return not 'done';
         });
@@ -105,11 +107,11 @@ sub process_files ($$$) {
       die $cr unless $cr->exit_code == 0;
       $fr->{result}->{ok} = 1;
       $result->{result}->{pass}++;
-      warn "PASS $file_name\n";
+      warn " PASS\n";
     })->catch (sub {
       my $e = $_[0];
       $fr->{error}->{message} = ''.$e;
-      warn "FAIL $file_name\n";
+      warn " FAIL\n";
       $result->{result}->{fail}++;
     })->finally (sub {
       return $output_w->close;
@@ -147,8 +149,8 @@ sub main () {
       #$result->{result}->{exit_code} = 1;
     } else {
       $result->{result}->{exit_code} = 0;
+      $result->{result}->{ok} = 1;
     }
-    # XXX ok
   })->catch (sub {
     my $error = $_[0];
     $result->{result}->{error} = '' . $error;
