@@ -52,12 +52,15 @@ sub expand_files ($) {
 sub process_files ($$$) {
   my ($base_dir_path, $file_paths, $result) = @_;
 
+  my $count = 0+@$file_paths;
+  my $n = 1;
   return promised_for {
     my $path = shift;
     my $file_name = $path->relative ($base_dir_path);
 
     # XXX
-    print STDERR "$file_name...";
+    print STDERR "$n/$count $file_name...";
+    $n++;
 
     my $cmd = Promised::Command->new ([ # XXX
       'perl',
@@ -162,6 +165,9 @@ sub main () {
         ($result->{result}->{json_file});
     return $result_json_file->write_byte_string (perl2json_bytes $result);
   })->then (sub {
+    warn "Result: |$result->{result}->{json_file}|\n";
+    warn sprintf "Pass: %d, Fail: %d\n",
+        $result->{result}->{pass}, $result->{result}->{fail};
     return $result;
   });
 } # main
@@ -340,9 +346,14 @@ The number of the passed tests within the process, if known.
 
 Wakaba <wakaba@suikawiki.org>.
 
+=head1 HISTORY
+
+This Git repository was located at <https://github.com/wakaba/tesica>
+until 14 March, 2022.
+
 =head1 LICENSE
 
-Copyright 2018-2019 Wakaba <wakaba@suikawiki.org>.
+Copyright 2018-2022 Wakaba <wakaba@suikawiki.org>.
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself.
