@@ -10,21 +10,39 @@ use Promised::File;
 use Promised::Command;
 use JSON::PS;
 
-sub _files ($$$$$);
-sub _files ($$$$$) {
-  my ($base, $names, $name_pattern, $next_name_pattern, $files) = @_;
-  return promised_for {
+my $Executors = {
+  perl => {
+    exts => [qw(t)],
+  },
+}; # $Executors
+my $Ext2Executors = {};
+for my $xtype (sort { $a cmp $b } keys %$Executors) {
+  for (@{$Executors->{$xtype}->{exts} or []}) {
+    $Ext2Executors->{$_} = $xtype;
+  }
+}
+
+sub _files ($$$$);
+sub _files ($$$$) {
+  my ($base, $names, $files, $is_sub) = @_;
+  my $in_names = {};
+  if (not $is_sub) {
+    $in_names->{$_} = 1 for @$names;
+  }
+  my $files2 = [];
+  return ((promised_for {
     my $name = $_[0];
     my $path = path ($name)->absolute ($base);
     my $file = Promised::File->new_from_path ($path);
     return $file->is_file->then (sub {
       if ($_[0]) {
-        push @$files, {path => $path} if $name =~ /$name_pattern/;
+        push @$files, {path => $path, file_name => $name,
+                       specified => $in_names->{$name}};
       } else {
         return $file->is_directory->then (sub {
           if ($_[0]) {
             return $file->get_child_names->then (sub {
-              return _files $path, [sort { $a cmp $b } @{$_[0]}], $next_name_pattern, $next_name_pattern, $files;
+              return _files $path, [sort { $a cmp $b } @{$_[0]}], $files2, 1;
             }, sub {
               my $e = shift;
               my $msg;
@@ -38,6 +56,8 @@ sub _files ($$$$$) {
                 $msg = '' . $e;
               }
               push @$files, {path => $path,
+                             file_name => $name,
+                             specified => $in_names->{$name},
                              time => time,
                              error => {
                                message => $msg,
@@ -45,6 +65,8 @@ sub _files ($$$$$) {
             });
           } else {
             push @$files, {path => $path,
+                           file_name => $name,
+                           specified => $in_names->{$name},
                            time => time,
                            error => {
                              message => "Failed to read a file or directory",
@@ -53,7 +75,9 @@ sub _files ($$$$$) {
         });
       }
     });
-  } $names;
+  } $names)->then (sub {
+    push @$files, @$files2;
+  }));
 } # _files
 
 sub expand_files ($$) {
@@ -65,14 +89,42 @@ sub expand_files ($$) {
 
   unless (defined $rule->{files} and
           ref $rule->{files} eq 'ARRAY') {
+    ## Default for Perl
     $rule->{files} = ['t'];
   }
 
   my $files = [];
-  return _files ($rule->{base_dir}, $rule->{files}, qr/./, qr/\.t\z/, $files)->then (sub {
-    return [sort { $a->{path} cmp $b->{path} } @$files];
+  return _files ($rule->{base_dir}, $rule->{files}, $files, 0)->then (sub {
+    return $files;
   });
 } # expand_files
+
+sub filter_files ($) {
+  my $in_files = shift;
+  my $out_files = [];
+  my $found = {};
+  for my $file (@$in_files) {
+    next if $found->{$file->{path}}++;
+    if ($file->{error}) {
+      push @$out_files, $file;
+    } else {
+      my $ext = undef;
+      $ext = $1 if $file->{file_name} =~ /\.([^\.]+)\z/;
+      my $xtype = $Ext2Executors->{$ext};
+      if (defined $xtype) {
+        $file->{executor} = {type => $xtype};
+        push @$out_files, $file;
+      } else {
+        if ($file->{specified}) {
+          $file->{error} = {message => "No test executor found"};
+          push @$out_files, $file;
+        }
+      }
+    }
+  }
+  $out_files = [sort { $a->{path} cmp $b->{path} } @$out_files];
+  return $out_files;
+} # filter_files
 
 sub process_files ($$$) {
   my ($base_dir_path, $file_paths, $result) = @_;
@@ -94,9 +146,13 @@ sub process_files ($$$) {
       return;
     }
 
+    $fr->{executor} = $file->{executor};
+
     # XXX
-    print STDERR "$n/$count $file_name...";
+    print STDERR "$n/$count [$fr->{executor}->{type}] $file_name...";
     $n++;
+
+    #$fr->{executor}->{type} eq 'perl'
 
     my $cmd = Promised::Command->new ([ # XXX
       'perl',
@@ -165,21 +221,22 @@ sub main (@) {
   my $base_dir_path;
   return Promise->resolve->then (sub {
     $rule = {
-      type => 'perl',
       result_json_file => 'local/test/result.json',
     };
     $rule->{base_dir} = '.' unless defined $rule->{base_dir};
     $base_dir_path = path ($rule->{base_dir})->absolute;
     $result->{rule}->{base_dir} = '' . $base_dir_path;
-    $result->{rule}->{type} = $rule->{type};
     my $result_json_path = path ($rule->{result_json_file})->absolute ($base_dir_path);
     $result->{result}->{json_file} = $result_json_path->relative ($base_dir_path);
 
     return expand_files $rule, \@args;
   })->then (sub {
     my $files = $_[0];
+    return filter_files $files;
+  })->then (sub {
+    my $files = $_[0];
     $result->{files} = [map {
-      {file_name => $_->{path}->relative ($base_dir_path)};
+      {file_name_path => $_->{path}->relative ($base_dir_path)};
     } @$files];
     return process_files $base_dir_path, $files => $result;
   })->then (sub {
@@ -245,10 +302,6 @@ A JSON object with following name/value pairs:
 
 =over 4
 
-=item type
-
-A string C<perl>.
-
 =item base_dir : String
 
 The absolute path of the base directory.
@@ -265,6 +318,10 @@ A JSON object whose names are the paths of the test scripts and values
 are corresponding results, with following name/value pairs:
 
 =over 4
+
+=item executor : Executor?
+
+The description of the test executor used for the file, if any.
 
 =item times : Times
 
@@ -300,13 +357,25 @@ empty String, a JSON false value, a JSON null value, or omission of
 the name/value pair if the context is the value of a name/value pair
 of an Object.  True is represented by a non-false value.
 
+=item Executor
+
+An Object representing an executor, with following name/value pair:
+
+=over 4
+
+=item type : String
+
+The executor type.  A String C<perl> for now.
+
+=back
+
 =item File
 
 An Object representing a file, with following name/value pair:
 
 =over 4
 
-=item file_name : Path
+=item file_name_path : Path
 
 The path to the file.
 
