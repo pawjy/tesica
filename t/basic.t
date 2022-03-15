@@ -20,69 +20,10 @@ Test {
       is $json->{result}->{exit_code}, 0;
       is $json->{result}->{json_file}, 'local/test/result.json';
       is 0+@{$json->{files}}, 1;
-      is $json->{files}->[0], 't/abc.t';
+      is $json->{files}->[0]->{file_name}, 't/abc.t';
     } $c;
   });
 } n => 7, name => 'No arguments';
-
-for (
-  [{
-    't/abc.t' => {perl_test => 1},
-  }, [qw(t/abc.t)]],
-  [{
-    't/abc.t' => {perl_test => 1},
-    't/xyz.t' => {perl_test => 1},
-  }, [qw(t/abc.t t/xyz.t)]],
-  [{
-    't/abc.t' => {perl_test => 1},
-    't/aa/xyz.t' => {perl_test => 1},
-  }, [qw(t/aa/xyz.t t/abc.t)]],
-  [{
-    't/zz/abc.t' => {perl_test => 1},
-    't/aa/xyz.t' => {perl_test => 1},
-  }, [qw(t/aa/xyz.t t/zz/abc.t)]],
-  [{
-    't/abc.t' => {perl_test => 1},
-    't/xyz.txt' => {perl_test => 1},
-  }, [qw(t/abc.t)]],
-  [{
-    't/abc' => {perl_test => 1},
-    't/xyz.txt' => {perl_test => 1},
-  }, []],
-  [{
-    't/abc.t' => {perl_test => 1},
-    't_deps/xyz.t' => {perl_test => 1},
-  }, [qw(t/abc.t)]],
-  [{
-    't/abc.t' => {perl_test => 1},
-    't/foo.t/xyz.txt' => {perl_test => 1},
-  }, [qw(t/abc.t)]],
-  [{
-    't/abc.t' => {perl_test => 1},
-    't/foo.t/xyz.t' => {perl_test => 1},
-  }, [qw(t/abc.t t/foo.t/xyz.t)]],
-) {
-  my ($files, $expected) = @$_;
-  Test {
-    my $c = shift;
-    return run (
-      files => $files,
-    )->then (sub {
-      my $return = $_[0];
-      test {
-        my $json = $return->{json};
-        is $return->{result}->exit_code, $json->{result}->{exit_code};
-        is $json->{result}->{exit_code}, 0;
-        is $json->{rule}->{type}, 'perl';
-        is join ($;, @{$json->{files}}),
-           join ($;, @$expected);
-        ok $json->{times}->{start};
-        ok $json->{times}->{end};
-        ok $json->{times}->{start} < $json->{times}->{end};
-      } $c;
-    });
-  } n => 7, name => ['files', @$expected];
-}
 
 Test {
   my $c = shift;

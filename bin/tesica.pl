@@ -19,15 +19,36 @@ sub _files ($$$$$) {
     my $file = Promised::File->new_from_path ($path);
     return $file->is_file->then (sub {
       if ($_[0]) {
-        push @$files, $path if $name =~ /$name_pattern/;
+        push @$files, {path => $path} if $name =~ /$name_pattern/;
       } else {
         return $file->is_directory->then (sub {
           if ($_[0]) {
             return $file->get_child_names->then (sub {
               return _files $path, [sort { $a cmp $b } @{$_[0]}], $next_name_pattern, $next_name_pattern, $files;
+            }, sub {
+              my $e = shift;
+              my $msg;
+              if (UNIVERSAL::can ($e, 'message')) {
+                if (UNIVERSAL::can ($e, 'name')) {
+                  $msg = $e->name . ': ' . $e->message;
+                } else {
+                  $msg = '' . $e->message;
+                }
+              } else {
+                $msg = '' . $e;
+              }
+              push @$files, {path => $path,
+                             time => time,
+                             error => {
+                               message => $msg,
+                             }};
             });
           } else {
-            die "|$path| is not a test script\n";
+            push @$files, {path => $path,
+                           time => time,
+                           error => {
+                             message => "Failed to read a file or directory",
+                           }};
           }
         });
       }
@@ -35,8 +56,12 @@ sub _files ($$$$$) {
   } $names;
 } # _files
 
-sub expand_files ($) {
-  my $rule = $_[0];
+sub expand_files ($$) {
+  my ($rule, $args) = @_;
+
+  if (@$args) {
+    $rule->{files} = $args;
+  }
 
   unless (defined $rule->{files} and
           ref $rule->{files} eq 'ARRAY') {
@@ -45,7 +70,7 @@ sub expand_files ($) {
 
   my $files = [];
   return _files ($rule->{base_dir}, $rule->{files}, qr/./, qr/\.t\z/, $files)->then (sub {
-    return $files;
+    return [sort { $a->{path} cmp $b->{path} } @$files];
   });
 } # expand_files
 
@@ -55,8 +80,19 @@ sub process_files ($$$) {
   my $count = 0+@$file_paths;
   my $n = 1;
   return promised_for {
-    my $path = shift;
-    my $file_name = $path->relative ($base_dir_path);
+    my $file = shift;
+    my $file_name = $file->{path}->relative ($base_dir_path);
+    my $fr = $result->{file_results}->{$file_name} = {
+      result => {ok => 0},
+      times => {start => time},
+    };
+
+    if ($file->{error}) {
+      $fr->{times}->{end} = $fr->{times}->{start} = $file->{time};
+      $fr->{error} = $file->{error};
+      $result->{result}->{fail}++;
+      return;
+    }
 
     # XXX
     print STDERR "$n/$count $file_name...";
@@ -64,13 +100,9 @@ sub process_files ($$$) {
 
     my $cmd = Promised::Command->new ([ # XXX
       'perl',
-      $path,
+      $file->{path},
     ]);
 
-    my $fr = $result->{file_results}->{$file_name} = {
-      result => {ok => 0},
-      times => {start => time},
-    };
     my $escaped_name = $file_name;
     $escaped_name =~ s{([^A-Za-z0-9])}{sprintf '_%02X', ord $1}ge;
     my $output_path = $base_dir_path->child ('local/test/files')
@@ -113,6 +145,7 @@ sub process_files ($$$) {
       warn " PASS\n";
     })->catch (sub {
       my $e = $_[0];
+      $fr->{times}->{end} //= time;
       $fr->{error}->{message} = ''.$e;
       warn " FAIL\n";
       $result->{result}->{fail}++;
@@ -122,7 +155,9 @@ sub process_files ($$$) {
   } $file_paths;
 } # process_files
 
-sub main () {
+sub main (@) {
+  my @args = @_;
+  
   my $rule;
   my $result = {result => {exit_code => 1, pass => 0, fail => 0},
                 times => {start => time},
@@ -140,11 +175,11 @@ sub main () {
     my $result_json_path = path ($rule->{result_json_file})->absolute ($base_dir_path);
     $result->{result}->{json_file} = $result_json_path->relative ($base_dir_path);
 
-    return expand_files $rule;
+    return expand_files $rule, \@args;
   })->then (sub {
     my $files = $_[0];
     $result->{files} = [map {
-      $_->relative ($base_dir_path);
+      {file_name => $_->{path}->relative ($base_dir_path)};
     } @$files];
     return process_files $base_dir_path, $files => $result;
   })->then (sub {
@@ -168,11 +203,16 @@ sub main () {
     warn "Result: |$result->{result}->{json_file}|\n";
     warn sprintf "Pass: %d, Fail: %d\n",
         $result->{result}->{pass}, $result->{result}->{fail};
+    if ($result->{result}->{exit_code} == 0) {
+      warn "Test passed\n";
+    } else {
+      warn "Test failed\n";
+    }
     return $result;
   });
 } # main
 
-my $result = main ()->to_cv->recv; # or die
+my $result = main (@ARGV)->to_cv->recv; # or die
 exit $result->{result}->{exit_code};
 
 =head1 NAME
@@ -215,9 +255,9 @@ The absolute path of the base directory.
 
 =back
 
-=item files : Array<Path>
+=item files : Array<File>
 
-A JSON array of the paths of the test scripts.
+A JSON array of the files of the test scripts.
 
 =item file_results : Object<Path, Object>
 
@@ -259,6 +299,18 @@ A boolean value.  False is represented by one of: a JSON number 0, an
 empty String, a JSON false value, a JSON null value, or omission of
 the name/value pair if the context is the value of a name/value pair
 of an Object.  True is represented by a non-false value.
+
+=item File
+
+An Object representing a file, with following name/value pair:
+
+=over 4
+
+=item file_name : Path
+
+The path to the file.
+
+=back
 
 =item Integer
 
@@ -309,11 +361,11 @@ name/value pairs:
 
 =over 4
 
-=item exit_code : Integer
+=item exit_code : Integer?
 
-The exit code of the process.  The exit code of the Unix process, if
-the process is a Unix process.  E.g. zero if there is no problem
-detected.
+The exit code of the process, if a process is executed.  The exit code
+of the Unix process, if the process is a Unix process.  E.g. zero if
+there is no problem detected.
 
 =item fail : Integer?
 

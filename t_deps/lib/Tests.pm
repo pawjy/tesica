@@ -50,6 +50,7 @@ sub run (%) {
   my $cmd = Promised::Command->new ([
     $RootPath->child ('perl')->absolute,
     $RootPath->child ('bin/tesica.pl')->absolute,
+    @{$args{args} or []},
   ]);
   $cmd->wd ($temp_path);
 
@@ -60,19 +61,34 @@ sub run (%) {
       my $path = $temp_path->child ($name);
       my $file = Promised::File->new_from_path ($path);
       my $def = $files->{$name};
-      my $data = '';
-      if (defined $def->{bytes}) {
-        $data = $def->{bytes};
-      } elsif ($def->{perl_test}) {
-        if ($def->{perl_test} eq 'ok') {
-          $data = 'exit 0';
-        } elsif ($def->{perl_test} eq 'ng') {
-          $data = 'exit 1';
-        } else {
-          #
+      return Promise->resolve->then (sub {
+        my $data = '';
+        if (defined $def->{bytes}) {
+          $data = $def->{bytes};
+        } elsif ($def->{perl_test}) {
+          if ($def->{perl_test} eq 'ok') {
+            $data = 'exit 0';
+          } elsif ($def->{perl_test} eq 'ng') {
+            $data = 'exit 1';
+          } else {
+            #
+          }
+        } elsif ($def->{directory}) {
+          return $file->mkpath;
         }
-      }
-      return $file->write_byte_string ($data);
+        return $file->write_byte_string ($data);
+      })->then (sub {
+        return unless $def->{unreadable};
+        my $cmd = Promised::Command->new ([
+          'chmod', '-r', $path,
+        ]);
+        return $cmd->run->then (sub {
+          return $cmd->wait;
+        })->then (sub {
+          my $result = $_[0];
+          die $result unless $result->exit_code == 0;
+        });
+      });
     } [keys %$files];
   })->then (sub {
     return $cmd->run;
