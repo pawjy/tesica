@@ -10,6 +10,14 @@ for (
   }, [qw(t/abc.t)]],
   [{
     't/abc.t' => {perl_test => 1},
+    'abc.t' => {perl_test => 1},
+  }, [qw(t/abc.t)]],
+  [{
+    't/abc.t' => {perl_test => 1},
+    'x/t/abc.t' => {perl_test => 1},
+  }, [qw(t/abc.t)]],
+  [{
+    't/abc.t' => {perl_test => 1},
     't/xyz.t' => {perl_test => 1},
   }, [qw(t/abc.t t/xyz.t)]],
   [{
@@ -52,15 +60,14 @@ for (
         my $json = $return->{json};
         is $return->{result}->exit_code, $json->{result}->{exit_code};
         is $json->{result}->{exit_code}, 0;
-        is $json->{rule}->{type}, 'perl';
-        is join ($;, map { $_->{file_name} } @{$json->{files}}),
+        is join ($;, map { $_->{file_name_path} } @{$json->{files}}),
            join ($;, sort { $a cmp $b } @$expected);
         ok $json->{times}->{start};
         ok $json->{times}->{end};
         ok $json->{times}->{start} < $json->{times}->{end};
       } $c;
     });
-  } n => 7, name => ['no argument default', @$expected];
+  } n => 6, name => ['no argument default', @$expected];
 }
 
 for (
@@ -120,7 +127,26 @@ for (
     't2/ab/c.txt' => {perl_test => 1},
     't2/ab/x.t' => {perl_test => 1},
     't_deps/xyz.t' => {perl_test => 1},
-  }, [qw(.)], [qw(t2/abc.t t2/ab/c.t t2/ab/x.t t/abc.t t_deps/xyz.t t2/def.t)], 0],
+    'foo.t' => {perl_test => 1},
+  }, [qw(.)], [qw(t2/abc.t t2/ab/c.t t2/ab/x.t t/abc.t t_deps/xyz.t t2/def.t
+                  foo.t)], 0],
+  [{
+    't/abc.t' => {perl_test => 1},
+    't2/xyz.t' => {perl_test => 1},
+    't2/t/xyz.t' => {perl_test => 1},
+  }, [qw(t2)], [qw(t2/xyz.t t2/t/xyz.t)], 0],
+  [{
+    't/abc.t' => {perl_test => 1},
+    't_deps/xyz.t' => {perl_test => 1},
+  }, [qw(t/abc.t t/abc.t)], [qw(t/abc.t)], 0],
+  [{
+    't/abc.t' => {perl_test => 1},
+    't/def.t' => {perl_test => 'ng'},
+  }, [qw(t/abc.t t/def.t t/def.t t/abc.t)], [qw(t/abc.t t/def.t)], 1],
+  [{
+    'u/abc.t' => {perl_test => 1},
+    'u/def.t' => {perl_test => 'ng'},
+  }, [qw(u u/def.t)], [qw(u/abc.t u/def.t)], 1],
 ) {
   my ($files, $args, $expected, $fail_count) = @$_;
   Test {
@@ -134,7 +160,7 @@ for (
         my $json = $return->{json};
         is $return->{result}->exit_code, $fail_count ? 1 : 0;
         is $json->{result}->{fail}, $fail_count;
-        is join ($;, map { $_->{file_name} } @{$json->{files}}),
+        is join ($;, map { $_->{file_name_path} } @{$json->{files}}),
            join ($;, sort { $a cmp $b } @$expected);
       } $c;
     });
@@ -153,7 +179,7 @@ Test {
       my $json = $return->{json};
       is $return->{result}->exit_code, 1;
       is 0+@{$json->{files}}, 1;
-      is $json->{files}->[0]->{file_name}, 'abc.t';
+      is $json->{files}->[0]->{file_name_path}, 'abc.t';
       is $json->{result}->{exit_code}, 1;
       ok ! $json->{result}->{ok};
       is $json->{result}->{fail}, 1;
@@ -182,8 +208,8 @@ Test {
       my $json = $return->{json};
       is $return->{result}->exit_code, 1;
       is 0+@{$json->{files}}, 2;
-      is $json->{files}->[0]->{file_name}, 'abc.t';
-      is $json->{files}->[1]->{file_name}, 'def.t';
+      is $json->{files}->[0]->{file_name_path}, 'abc.t';
+      is $json->{files}->[1]->{file_name_path}, 'def.t';
       is $json->{result}->{exit_code}, 1;
       ok ! $json->{result}->{ok};
       is $json->{result}->{fail}, 1;
@@ -218,8 +244,8 @@ Test {
       my $json = $return->{json};
       is $return->{result}->exit_code, 1;
       is 0+@{$json->{files}}, 2;
-      is $json->{files}->[0]->{file_name}, 'abc.t';
-      is $json->{files}->[1]->{file_name}, 'def.t';
+      is $json->{files}->[0]->{file_name_path}, 'abc.t';
+      is $json->{files}->[1]->{file_name_path}, 'def.t';
       is $json->{result}->{exit_code}, 1;
       ok ! $json->{result}->{ok};
       is $json->{result}->{fail}, 1;
@@ -258,8 +284,8 @@ Test {
       my $json = $return->{json};
       is $return->{result}->exit_code, 1;
       is 0+@{$json->{files}}, 2;
-      is $json->{files}->[0]->{file_name}, 'abc/x.t';
-      is $json->{files}->[1]->{file_name}, 'def.t';
+      is $json->{files}->[0]->{file_name_path}, 'abc/x.t';
+      is $json->{files}->[1]->{file_name_path}, 'def.t';
       is $json->{result}->{exit_code}, 1;
       ok ! $json->{result}->{ok};
       is $json->{result}->{fail}, 1;
@@ -298,8 +324,8 @@ Test {
       my $json = $return->{json};
       is $return->{result}->exit_code, 1;
       is 0+@{$json->{files}}, 2;
-      is $json->{files}->[0]->{file_name}, 'abc';
-      is $json->{files}->[1]->{file_name}, 'def.t';
+      is $json->{files}->[0]->{file_name_path}, 'abc';
+      is $json->{files}->[1]->{file_name_path}, 'def.t';
       is $json->{result}->{exit_code}, 1;
       ok ! $json->{result}->{ok};
       is $json->{result}->{fail}, 1;
