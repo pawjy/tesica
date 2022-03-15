@@ -4,3 +4,4 @@
 - "../../modules/streams" build tests
 - "../../modules/promised-file" build tests
 - "../../modules/json-ps" build tests
+- "../../modules/web-encodings" build tests
