@@ -105,27 +105,6 @@ Test {
   });
 } n => 11, name => ['fails'];
 
-Test {
-  my $c = shift;
-  return run (
-    files => {
-      't/abc.t' => {bytes => 'print STDOUT "abc\x0A"'},
-      't/def.t' => {bytes => 'print STDERR "xyz\x0AAAA"'},
-    },
-  )->then (sub {
-    my $return = $_[0];
-    test {
-      my $json = $return->{json};
-      is $json->{file_results}->{'t/abc.t'}->{output_file},
-          'local/test/files/t_2Fabc_2Et.txt';
-      is $json->{file_results}->{'t/def.t'}->{output_file},
-          'local/test/files/t_2Fdef_2Et.txt';
-      is $return->{file_bytes}->('local/test/files/t_2Fabc_2Et.txt'), "abc\x0A";
-      is $return->{file_bytes}->('local/test/files/t_2Fdef_2Et.txt'), "xyz\x0AAAA";
-    } $c;
-  });
-} n => 4, name => ['test output result files'];
-
 run_tests;
 
 =head1 LICENSE

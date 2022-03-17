@@ -166,29 +166,50 @@ sub process_files ($$$) {
     $fr->{output_file} = $output_path->relative ($base_dir_path);
     my $output_ws = Promised::File->new_from_path ($output_path)->write_bytes;
     my $output_w = $output_ws->get_writer;
+    my $output_chunk = sub {
+      my ($h, $chunk) = @_;
+      print STDERR ".";
+      my $v = sprintf "\x0A&%d %d %.9f\x0A",
+          $h,
+          $chunk->byte_length,
+          time;
+      $output_w->write (DataView->new (ArrayBuffer->new_from_scalarref (\$v)));
+      return $output_w->write ($chunk);
+    };
+    my $closed = sub {
+      my ($h) = @_;
+      my $v = sprintf "\x0A&%d -1 %.9f\x0A",
+          $h,
+          time;
+      return $output_w->write (DataView->new (ArrayBuffer->new_from_scalarref (\$v)));
+    };
+    my @wait;
     my $so_rs = $cmd->get_stdout_stream;
     my $so_r = $so_rs->get_reader ('byob');
-    promised_until {
+    push @wait, promised_until {
       return $so_r->read (DataView->new (ArrayBuffer->new (1024)))->then (sub {
-        return 'done' if $_[0]->{done};
-        print STDERR ".";
-        return $output_w->write ($_[0]->{value})->then (sub {
+        if ($_[0]->{done}) {
+          push @wait, $closed->(1);
+          return 'done';
+        }
+        return $output_chunk->(1, $_[0]->{value})->then (sub {
           return not 'done';
         });
       });
     };
     my $se_rs = $cmd->get_stderr_stream;
     my $se_r = $se_rs->get_reader ('byob');
-    promised_until {
+    push @wait, promised_until {
       return $se_r->read (DataView->new (ArrayBuffer->new (1024)))->then (sub {
-        return 'done' if $_[0]->{done};
-        print STDERR ".";
-        return $output_w->write ($_[0]->{value})->then (sub {
+        if ($_[0]->{done}) {
+          push @wait, $closed->(2);
+          return 'done';
+        }
+        return $output_chunk->(2, $_[0]->{value})->then (sub {
           return not 'done';
         });
       });
     };
-    # XXX stdout/stderr line boundaries
     return $cmd->run->then (sub {
       return $cmd->wait;
     })->then (sub {
@@ -207,6 +228,8 @@ sub process_files ($$$) {
       $result->{result}->{fail}++;
     })->finally (sub {
       return $output_w->close;
+    })->finally (sub {
+      return Promise->all (\@wait);
     });
   } $file_paths;
 } # process_files
@@ -451,8 +474,40 @@ Whether the process is success or not.
 =item output_file : Path (file result only)
 
 The path to the output file, which contains standard output and
-standard error output of the test script.  The output file is stored
-under the C<local/test/files> directory within the base directory.
+standard error output of the test script.
+
+The output file is stored under the C<local/test/files> directory
+within the base directory.
+
+An output file is a sequence of one or more data chunks.  A chunk is a
+chunk header followed by a chunk body.  A chunk header is a sequence
+of the followings:
+
+  0x0A byte;
+  ASCII "&" byte;
+  descriptor integer;
+  0x20 byte;
+  size integer;
+  0x20 byte;
+  timestamp; and
+  0x0A byte.
+
+Where a descriptor integer is C<1> (the standard output) or C<2> (the
+standard error output); A size integer is either a non-zero ASCII
+digit followed by zero or more ASCII digits, C<0>, or C<-1>; A
+timestamp is one or more ASCII digits followed by an ASCII "." byte
+followed by one or more ASCII digits.
+
+The timestamp represents the time the chunk was received, in decimal
+number of the Unix time.  The timestamp of a chunk is always equal to
+or greater than that of any previous chunk.
+
+the size integer represents the number of the bytes in the chunk body,
+in decimal integer, when the number is zero or greater, or represents
+the end of the file when the number is C<-1>.
+
+A chunk body is the bytes that belongs to the file identified by the
+descriptor integer.
 
 =item pass : Integer?
 
