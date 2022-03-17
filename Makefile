@@ -92,8 +92,7 @@ test: test-deps test-main
 
 test-deps: deps
 
-test-main: test-main-files
-#XXX test-main-compiled
+test-main: test-main-files test-main-compiled
 
 test-main-files:
 	$(PROVE) t/*.t

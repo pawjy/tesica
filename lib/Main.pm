@@ -127,14 +127,34 @@ sub filter_files ($) {
   return $out_files;
 } # filter_files
 
+sub load_executors ($$) {
+  my ($env, $result) = @_;
+  return promised_for {
+    my $xtype = shift;
+    my $xenv = $env->{executors}->{$xtype};
+    if ($xtype eq 'perl') {
+      my $perl_path = $env->{base_dir_path}->child ('perl');
+      my $perl_file = Promised::File->new_from_path ($perl_path);
+      return $perl_file->is_executable->then (sub {
+        if ($_[0]) {
+          $xenv->{perl_command} = [$perl_path->absolute];
+        } else {
+          $xenv->{perl_command} = ['perl'];
+        }
+        $result->{executors}->{$xtype}->{perl_command} = [map { '' . $_ } @{$xenv->{perl_command}}];
+      });
+    } # $xtype
+  } [keys %{$env->{executors}}];
+} # load_executors
+
 sub process_files ($$$) {
-  my ($base_dir_path, $file_paths, $result) = @_;
+  my ($env, $file_paths, $result) = @_;
 
   my $count = 0+@$file_paths;
   my $n = 1;
   return promised_for {
     my $file = shift;
-    my $file_name = $file->{path}->relative ($base_dir_path);
+    my $file_name = $file->{path}->relative ($env->{base_dir_path});
     my $fr = $result->{file_results}->{$file_name} = {
       result => {ok => 0},
       times => {start => time},
@@ -149,22 +169,22 @@ sub process_files ($$$) {
 
     $fr->{executor} = $file->{executor};
 
-    # XXX
     print STDERR "$n/$count [$fr->{executor}->{type}] $file_name...";
     $n++;
 
     #$fr->{executor}->{type} eq 'perl'
+    my $xenv = $env->{executors}->{$fr->{executor}->{type}};
 
-    my $cmd = Promised::Command->new ([ # XXX
-      'perl',
+    my $cmd = Promised::Command->new ([
+      @{$xenv->{perl_command}},
       $file->{path},
     ]);
 
     my $escaped_name = $file_name;
     $escaped_name =~ s{([^A-Za-z0-9])}{sprintf '_%02X', ord $1}ge;
-    my $output_path = $base_dir_path->child ('local/test/files')
+    my $output_path = $env->{base_dir_path}->child ('local/test/files')
         ->child ($escaped_name . '.txt');
-    $fr->{output_file} = $output_path->relative ($base_dir_path);
+    $fr->{output_file} = $output_path->relative ($env->{base_dir_path});
     my $output_ws = Promised::File->new_from_path ($output_path)->write_bytes;
     my $output_w = $output_ws->get_writer;
     my $output_chunk = sub {
@@ -241,17 +261,17 @@ sub main ($@) {
   my $rule;
   my $result = {result => {exit_code => 1, pass => 0, fail => 0},
                 times => {start => time},
-                file_results => {}};
-  my $base_dir_path;
+                file_results => {}, executors => {}};
+  my $env = {executors => {}};
   return Promise->resolve->then (sub {
     $rule = {
       result_json_file => 'local/test/result.json',
     };
     $rule->{base_dir} = '.' unless defined $rule->{base_dir};
-    $base_dir_path = path ($rule->{base_dir})->absolute;
-    $result->{rule}->{base_dir} = '' . $base_dir_path;
-    my $result_json_path = path ($rule->{result_json_file})->absolute ($base_dir_path);
-    $result->{result}->{json_file} = $result_json_path->relative ($base_dir_path);
+    $env->{base_dir_path} = path ($rule->{base_dir})->absolute;
+    $result->{rule}->{base_dir} = '' . $env->{base_dir_path};
+    my $result_json_path = path ($rule->{result_json_file})->absolute ($env->{base_dir_path});
+    $result->{result}->{json_file} = $result_json_path->relative ($env->{base_dir_path});
 
     return expand_files $rule, \@args;
   })->then (sub {
@@ -260,9 +280,12 @@ sub main ($@) {
   })->then (sub {
     my $files = $_[0];
     $result->{files} = [map {
-      {file_name_path => $_->{path}->relative ($base_dir_path)};
+      $env->{executors}->{$_->{executor}->{type}} = {} if defined $_->{executor};
+      {file_name_path => $_->{path}->relative ($env->{base_dir_path})};
     } @$files];
-    return process_files $base_dir_path, $files => $result;
+    return load_executors ($env, $result)->then (sub {
+      return process_files $env, $files => $result;
+    });
   })->then (sub {
     if ($result->{result}->{fail}) {
       #$result->{result}->{exit_code} = 1;
