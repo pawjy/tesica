@@ -52,7 +52,7 @@ sub run (%) {
     $RootPath->child ('bin/tesica.pl')->absolute,
   ];
   if ($ENV{TEST_COMPILED_TESICA}) {
-    $tesica = [$RootPath->child ('tesica')];
+    $tesica = [$RootPath->child ('tesica')->absolute];
   }
   
   my $cmd = Promised::Command->new ([
@@ -84,6 +84,17 @@ sub run (%) {
           return $file->mkpath;
         }
         return $file->write_byte_string ($data);
+      })->then (sub {
+        return unless $def->{executable};
+        my $cmd = Promised::Command->new ([
+          'chmod', 'u+x', $path,
+        ]);
+        return $cmd->run->then (sub {
+          return $cmd->wait;
+        })->then (sub {
+          my $result = $_[0];
+          die $result unless $result->exit_code == 0;
+        });
       })->then (sub {
         return unless $def->{unreadable};
         my $cmd = Promised::Command->new ([

@@ -42,14 +42,30 @@ The absolute path of the base directory.
 
 =back
 
+=item executors : Object<String, Object>
+
+An Object whose names are the executor types and values are
+corresponding properties of them, with following name/value pair:
+
+=over 4
+
+=item perl_command : Array<String>?
+
+The command of Perl, if the executor type is C<perl>.
+
+If there is an executable file C<perl> in the base directory, it is
+used.  Otherwise, C<perl> in the platform's path is used.
+
+=back
+
 =item files : Array<File>
 
-A JSON array of the files of the test scripts.
+An Array of the files of the test scripts.
 
 =item file_results : Object<Path, Object>
 
-A JSON object whose names are the paths of the test scripts and values
-are corresponding results, with following name/value pairs:
+An Object whose names are the paths of the test scripts and values are
+corresponding results, with following name/value pairs:
 
 =over 4
 
