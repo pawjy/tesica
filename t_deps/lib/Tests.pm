@@ -46,10 +46,17 @@ sub run (%) {
   
   my $temp = File::Temp->newdir;
   my $temp_path = path ($temp);
-  
-  my $cmd = Promised::Command->new ([
+
+  my $tesica = [
     $RootPath->child ('perl')->absolute,
     $RootPath->child ('bin/tesica.pl')->absolute,
+  ];
+  if ($ENV{TEST_COMPILED_TESICA}) {
+    $tesica = [$RootPath->child ('tesica')];
+  }
+  
+  my $cmd = Promised::Command->new ([
+    @$tesica,
     @{$args{args} or []},
   ]);
   $cmd->wd ($temp_path);
