@@ -43,9 +43,14 @@ sub import ($;@) {
 push @EXPORT, qw(run);
 sub run (%) {
   my %args = @_;
-  
-  my $temp = File::Temp->newdir;
-  my $temp_path = path ($temp);
+
+  my $temps = [];
+  my $get_temp_path = sub {
+    my $temp = File::Temp->newdir;
+    push @$temps, $temp;
+    return path ($temp);
+  };
+  my $temp_path = $get_temp_path->();
 
   my $tesica = [
     $RootPath->child ('perl')->absolute,
@@ -60,6 +65,12 @@ sub run (%) {
     @{$args{args} or []},
   ]);
   $cmd->wd ($temp_path);
+
+  my $artifact_path;
+  $cmd->envs->{CIRCLE_ARTIFACTS} = '';
+  if ($args{has_artifact_path}) {
+    $cmd->envs->{CIRCLE_ARTIFACTS} = $artifact_path = $get_temp_path->();
+  }
 
   my $files = $args{files} || {};
   return Promise->resolve->then (sub {
@@ -116,13 +127,24 @@ sub run (%) {
     my $result = $_[0];
     my $return = {
       result => $result,
-      base_path => $temp_path, _temp => $temp,
-      file_bytes => sub {
-        return path ($_[0])->absolute ($temp_path)->slurp;
-      },
+      base_path => $temp_path,
+      artifact_path => $artifact_path, # or undef
+      _temp => $temps,
+    };
+
+    $return->{file_bytes} = sub {
+      my $base_path = path ($return->{json}->{rule}->{result_dir});
+      return path ($_[0] // die)->absolute ($base_path)->slurp;
+    };
+
+    $return->{result_file_bytes} = sub {
+      my $name = $return->{json}->{file_results}->{$_[0] // die "Bad argument"}->{output_file} // die "File not found";
+      return $return->{file_bytes}->($name);
     };
     
-    my $json_path = $temp_path->child ('local/test/result.json');
+    my $json_path = defined $return->{artifact_path}
+        ? $return->{artifact_path}->child ('result.json')
+        : $temp_path->child ('local/test/result.json');
     my $json_file = Promised::File->new_from_path ($json_path);
     return $json_file->read_byte_string->then (sub {
       my $json = json_bytes2perl $_[0];

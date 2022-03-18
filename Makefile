@@ -66,6 +66,7 @@ local/fatlib-files: local/fatpacker.packlists local/module-list.sh \
 	mv local/fatlib/AnyEvent/Util/uts46data.pl local/fatlib/AnyEvent/Util/uts46data.pm
 	cp intermediate/AnyEvent-constants.pm local/fatlib/AnyEvent/constants.pm
 	perl -i -pe 's{(AnyEvent/[^.]+)\.pl}{\1.pm}' local/fatlib/AnyEvent.pm
+	ls -R local/fatlib
 
 ./tesica: bin/tesica.pl local/fatlib-files
 	echo '#!/usr/bin/env perl' > $@

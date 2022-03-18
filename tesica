@@ -18857,9 +18857,9 @@ $fatpacked{"Main.pm"} = '#line '.(1+__LINE__).' "'.__FILE__."\"\n".<<'MAIN';
   
       my $escaped_name = $file_name;
       $escaped_name =~ s{([^A-Za-z0-9])}{sprintf '_%02X', ord $1}ge;
-      my $output_path = $env->{base_dir_path}->child ('local/test/files')
+      my $output_path = $env->{result_dir_path}->child ('files')
           ->child ($escaped_name . '.txt');
-      $fr->{output_file} = $output_path->relative ($env->{base_dir_path});
+      $fr->{output_file} = '' . $output_path->relative ($env->{result_dir_path});
       my $output_ws = Promised::File->new_from_path ($output_path)->write_bytes;
       my $output_w = $output_ws->get_writer;
       my $output_chunk = sub {
@@ -18933,20 +18933,26 @@ $fatpacked{"Main.pm"} = '#line '.(1+__LINE__).' "'.__FILE__."\"\n".<<'MAIN';
   sub main ($@) {
     my ($class, @args) = @_;
     
-    my $rule;
+    my $rule = {};
     my $result = {result => {exit_code => 1, pass => 0, fail => 0},
                   times => {start => time},
                   file_results => {}, executors => {}};
     my $env = {executors => {}};
     return Promise->resolve->then (sub {
-      $rule = {
-        result_json_file => 'local/test/result.json',
-      };
       $rule->{base_dir} = '.' unless defined $rule->{base_dir};
       $env->{base_dir_path} = path ($rule->{base_dir})->absolute;
       $result->{rule}->{base_dir} = '' . $env->{base_dir_path};
-      my $result_json_path = path ($rule->{result_json_file})->absolute ($env->{base_dir_path});
-      $result->{result}->{json_file} = $result_json_path->relative ($env->{base_dir_path});
+  
+      my $ca = $ENV{CIRCLE_ARTIFACTS} // '';
+      if (length $ca) {
+        $env->{result_dir_path} = path ($ca)->absolute;
+      } else {
+        $env->{result_dir_path} = $env->{base_dir_path}->child ('local/test');
+      }
+      $result->{rule}->{result_dir} = '' . $env->{result_dir_path};
+  
+      $env->{result_json_path} = $env->{result_dir_path}->child ('result.json');
+      $result->{result}->{json_file} = '' . $env->{result_json_path}->relative ($env->{result_dir_path});
   
       return expand_files $rule, \@args;
     })->then (sub {
@@ -18956,7 +18962,7 @@ $fatpacked{"Main.pm"} = '#line '.(1+__LINE__).' "'.__FILE__."\"\n".<<'MAIN';
       my $files = $_[0];
       $result->{files} = [map {
         $env->{executors}->{$_->{executor}->{type}} = {} if defined $_->{executor};
-        {file_name_path => $_->{path}->relative ($env->{base_dir_path})};
+        {file_name_path => '' . $_->{path}->relative ($env->{base_dir_path})};
       } @$files];
       return load_executors ($env, $result)->then (sub {
         return process_files $env, $files => $result;
@@ -18976,10 +18982,11 @@ $fatpacked{"Main.pm"} = '#line '.(1+__LINE__).' "'.__FILE__."\"\n".<<'MAIN';
     })->then (sub {
       $result->{times}->{end} = time;
       my $result_json_file = Promised::File->new_from_path
-          ($result->{result}->{json_file});
+          ($env->{result_json_path});
       return $result_json_file->write_byte_string (perl2json_bytes $result);
     })->then (sub {
-      warn "Result: |$result->{result}->{json_file}|\n";
+      warn sprintf "Result: |%s|\n",
+          $env->{result_json_path};
       warn sprintf "Pass: %d, Fail: %d\n",
           $result->{result}->{pass}, $result->{result}->{fail};
       if ($result->{result}->{exit_code} == 0) {
