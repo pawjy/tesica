@@ -349,6 +349,62 @@ Test {
   });
 } n => 20, name => ['one of directory not readable'];
 
+Test {
+  my $c = shift;
+  return run (
+    files => {
+      't/abc.t' => {bytes => 'print "ABC"'},
+      't/def.t' => {bytes => 'print "DEF"'},
+    },
+    has_artifact_path => 1,
+  )->then (sub {
+    my $return = $_[0];
+    test {
+      my $json = $return->{json};
+      is $json->{rule}->{base_dir}, $return->{base_path}->absolute->stringify;
+      is $json->{rule}->{result_dir}, $return->{artifact_path}->absolute->stringify;
+      is $json->{file_results}->{'t/abc.t'}->{output_file},
+          'files/t_2Fabc_2Et.txt';
+      is $json->{file_results}->{'t/def.t'}->{output_file},
+          'files/t_2Fdef_2Et.txt';
+      {
+        my $f = $return->{result_file_bytes}->('t/abc.t');
+        my $x = {1 => [], 2 => []};
+        my $s = {1 => '', 2 => ''};
+        while ($f =~ s{^\x0A&([12]) (-?[0-9]+) ([0-9]+\.[0-9]+)\x0A}{}) {
+          push @{$x->{$1}}, $2;
+          if ($2 >= 0) {
+            $s->{$1} .= substr $f, 0, $x->{$1}->[-1];
+            substr ($f, 0, $x->{$1}->[-1]) = '';
+          }
+        }
+        is $f, '';
+        is $s->{1}, "ABC";
+        is $s->{2}, "";
+        is $x->{1}->[-1], -1;
+        is $x->{2}->[-1], -1;
+      }
+      {
+        my $f = $return->{result_file_bytes}->('t/def.t');
+        my $x = {1 => [], 2 => []};
+        my $s = {1 => '', 2 => ''};
+        while ($f =~ s{^\x0A&([12]) (-?[0-9]+) ([0-9]+\.[0-9]+)\x0A}{}) {
+          push @{$x->{$1}}, $2;
+          if ($2 >= 0) {
+            $s->{$1} .= substr $f, 0, $x->{$1}->[-1];
+            substr ($f, 0, $x->{$1}->[-1]) = '';
+          }
+        }
+        is $f, '';
+        is $s->{1}, "DEF";
+        is $s->{2}, "";
+        is $x->{1}->[-1], -1;
+        is $x->{2}->[-1], -1;
+      }
+    } $c;
+  });
+} n => 14, name => ['artifacts'];
+
 run_tests;
 
 =head1 LICENSE

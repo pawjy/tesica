@@ -17,9 +17,9 @@ Test {
     test {
       my $json = $return->{json};
       is $json->{file_results}->{'t/abc.t'}->{output_file},
-          'local/test/files/t_2Fabc_2Et.txt';
+          'files/t_2Fabc_2Et.txt';
       {
-        my $f = $return->{file_bytes}->('local/test/files/t_2Fabc_2Et.txt');
+        my $f = $return->{result_file_bytes}->('t/abc.t');
         my $x = {1 => [], 2 => []};
         my $s = {1 => '', 2 => ''};
         while ($f =~ s{^\x0A&([12]) (-?[0-9]+) ([0-9]+\.[0-9]+)\x0A}{}) {
