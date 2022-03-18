@@ -66,9 +66,10 @@ sub run (%) {
   ]);
   $cmd->wd ($temp_path);
 
+  my $artifact_path;
   $cmd->envs->{CIRCLE_ARTIFACTS} = '';
   if ($args{has_artifact_path}) {
-    $cmd->envs->{CIRCLE_ARTIFACTS} = $get_temp_path->();
+    $cmd->envs->{CIRCLE_ARTIFACTS} = $artifact_path = $get_temp_path->();
   }
 
   my $files = $args{files} || {};
@@ -127,7 +128,7 @@ sub run (%) {
     my $return = {
       result => $result,
       base_path => $temp_path,
-      artifact_path => $cmd->envs->{CIRCLE_ARTIFACTS}, # or undef
+      artifact_path => $artifact_path, # or undef
       _temp => $temps,
     };
 
