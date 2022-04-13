@@ -253,6 +253,9 @@ sub process_files ($$$) {
       return $output_w->close;
     })->finally (sub {
       return Promise->all (\@wait);
+    })->then (sub {
+      $env->{write_result}->();
+      return undef;
     });
   } $file_paths;
 } # process_files
@@ -261,10 +264,12 @@ sub main ($@) {
   my ($class, @args) = @_;
   
   my $rule = {};
+  my $env = {executors => {}};
+
   my $result = {result => {exit_code => 1, pass => 0, fail => 0},
                 times => {start => time},
                 file_results => {}, executors => {}};
-  my $env = {executors => {}};
+  
   return Promise->resolve->then (sub {
     $rule->{base_dir} = '.' unless defined $rule->{base_dir};
     $env->{base_dir_path} = path ($rule->{base_dir})->absolute;
@@ -280,6 +285,12 @@ sub main ($@) {
 
     $env->{result_json_path} = $env->{result_dir_path}->child ('result.json');
     $result->{result}->{json_file} = '' . $env->{result_json_path}->relative ($env->{result_dir_path});
+    my $result_json_file = Promised::File->new_from_path
+        ($env->{result_json_path});
+    $env->{write_result} = sub {
+      $result->{times}->{now} = time;
+      return $result_json_file->write_byte_string (perl2json_bytes $result);
+    }; # write_result
 
     return expand_files $rule, \@args;
   })->then (sub {
@@ -292,6 +303,7 @@ sub main ($@) {
       {file_name_path => '' . $_->{path}->relative ($env->{base_dir_path})};
     } @$files];
     return load_executors ($env, $result)->then (sub {
+      $env->{write_result}->();
       return process_files $env, $files => $result;
     });
   })->then (sub {
@@ -310,9 +322,7 @@ sub main ($@) {
     warn "ERROR: $error\n";
   })->then (sub {
     $result->{times}->{end} = time;
-    my $result_json_file = Promised::File->new_from_path
-        ($env->{result_json_path});
-    return $result_json_file->write_byte_string (perl2json_bytes $result);
+    return $env->{write_result}->();
   })->then (sub {
     warn sprintf "Result: |%s|\n",
         $env->{result_json_path};
