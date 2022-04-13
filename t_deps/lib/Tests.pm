@@ -71,6 +71,14 @@ sub run (%) {
   if ($args{has_artifact_path}) {
     $cmd->envs->{CIRCLE_ARTIFACTS} = $artifact_path = $get_temp_path->();
   }
+  
+  $cmd->envs->{TESICA_MANIFEST_FILE} = '';
+  if ($args{manifest}) {
+    $cmd->envs->{TESICA_MANIFEST_FILE} = $temp_path->child ($args{manifest});
+  }
+
+  $cmd->stdout (\my $stdout);
+  $cmd->stderr (\my $stderr);
 
   my $files = $args{files} || {};
   return Promise->resolve->then (sub {
@@ -91,6 +99,8 @@ sub run (%) {
           } else {
             #
           }
+        } elsif ($def->{json}) {
+          $data = perl2json_bytes $def->{json};
         } elsif ($def->{directory}) {
           return $file->mkpath;
         }
@@ -138,7 +148,11 @@ sub run (%) {
       base_path => $temp_path,
       artifact_path => $artifact_path, # or undef
       _temp => $temps,
+      stdout => $stdout,
+      stderr => $stderr,
     };
+    #warn $stdout;
+    #warn $stderr;
 
     $return->{file_bytes} = sub {
       my $base_path = path ($return->{json}->{rule}->{result_dir});
