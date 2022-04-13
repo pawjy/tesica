@@ -453,7 +453,7 @@ Test {
     test {
       my $json = $return->{json};
       is $json->{result}->{exit_code}, 0;
-      is $json->{result}->{pass}, 2;
+      is $json->{result}->{pass}, 1;
       is $json->{result}->{fail}, 0;
       is $json->{result}->{skipped}, 1;
       is $json->{result}->{failure_ignored}, 0;
@@ -484,7 +484,7 @@ Test {
     test {
       my $json = $return->{json};
       is $json->{result}->{exit_code}, 0;
-      is $json->{result}->{pass}, 2;
+      is $json->{result}->{pass}, 1;
       is $json->{result}->{fail}, 0;
       is $json->{result}->{skipped}, 1;
       is 0+@{$json->{files}}, 2;

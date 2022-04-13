@@ -18850,8 +18850,14 @@ $fatpacked{"Main.pm"} = '#line '.(1+__LINE__).' "'.__FILE__."\"\n".<<'MAIN';
       }
     }
   
+    my $max_cfailure_count = 0+($env->{manifest}->{max_consecutive_failures} || 0);
+    $max_cfailure_count = 0 unless $max_cfailure_count > 0;
+    $result->{rule}->{max_consecutive_failures} = $max_cfailure_count
+        if $max_cfailure_count;
+  
     my $count = 0+@$file_paths;
     my $n = 0;
+    my $cfailure_count = 0;
     return promised_for {
       my $file = shift;
       my $file_name = $file->{path}->relative ($env->{base_dir_path});
@@ -18865,11 +18871,17 @@ $fatpacked{"Main.pm"} = '#line '.(1+__LINE__).' "'.__FILE__."\"\n".<<'MAIN';
         $fr->{times}->{end} = $fr->{times}->{start} = $file->{time};
         $fr->{error} = $file->{error};
         if ($file->{error}->{message} eq 'Skipped by request') {
-          $result->{result}->{pass}++;
           $result->{result}->{skipped}++;
         } else {
           $result->{result}->{fail}++;
         }
+        return;
+      }
+  
+      if ($max_cfailure_count and $cfailure_count > $max_cfailure_count) {
+        $fr->{times}->{end} = $fr->{times}->{start} = $file->{time};
+        $fr->{error} = {message => 'Too many failures before this test'};
+        $result->{result}->{skipped}++;
         return;
       }
   
@@ -18947,6 +18959,7 @@ $fatpacked{"Main.pm"} = '#line '.(1+__LINE__).' "'.__FILE__."\"\n".<<'MAIN';
         $fr->{result}->{completed} = 1;
         $result->{result}->{pass}++;
         warn " PASS\n";
+        $cfailure_count = 0;
       })->catch (sub {
         my $e = $_[0];
         $fr->{times}->{end} //= time;
@@ -18961,6 +18974,7 @@ $fatpacked{"Main.pm"} = '#line '.(1+__LINE__).' "'.__FILE__."\"\n".<<'MAIN';
           $result->{result}->{fail}++;
           warn " FAIL\n";
         }
+        $cfailure_count++;
       })->finally (sub {
         return $output_w->close;
       })->finally (sub {
@@ -19055,13 +19069,12 @@ $fatpacked{"Main.pm"} = '#line '.(1+__LINE__).' "'.__FILE__."\"\n".<<'MAIN';
     })->then (sub {
       warn sprintf "Result: |%s|\n",
           $env->{result_json_path} if defined $env->{result_json_path};
-      warn sprintf "Pass: %d, Fail: %d\n",
-          $result->{result}->{pass}, $result->{result}->{fail};
-      if ($result->{result}->{skipped} or
-          $result->{result}->{failure_ignored}) {
-        warn sprintf "(Passed: %d, Skipped: %d, Allowed failures: %d)\n",
-            $result->{result}->{pass} - $result->{result}->{skipped} - $result->{result}->{failure_ignored},
-            $result->{result}->{skipped},
+      warn sprintf "Pass: %d, Fail: %d, Skipped: %d\n",
+          $result->{result}->{pass},
+          $result->{result}->{fail},
+          $result->{result}->{skipped};
+      if ($result->{result}->{failure_ignored}) {
+        warn sprintf "(Allowed failures: %d)\n",
             $result->{result}->{failure_ignored};
       }
       if ($result->{result}->{exit_code} == 0) {
@@ -29419,6 +29432,12 @@ array of zero or more paths, relative to the test manifest file.
 Failure-ignored tests are executed as usual but counted as passed
 tests nevertheless their results.
 
+=item max_consecutive_failures : Integer?
+
+The number of maximum allowed consecutive failures.  If specified and
+there are more consecutive failing test scripts than that number, any
+following test scripts are skipped.
+
 =item skip : Array<String>?
 
 The files that are skipped.  If specified, it must be an array of zero
@@ -29460,6 +29479,10 @@ The absolute path of the base directory.
 =item manifest_file : String?
 
 The absolute path of the test manifest file, if any.
+
+=item max_consecutive_failures : Integer?
+
+The number of allowed maximum consecutive failures, if specified.
 
 =item result_dir : String
 
@@ -29698,8 +29721,8 @@ descriptor integer.
 
 =item pass : Integer?
 
-The number of the passed tests (including skipped and failure-ignored
-tests) within the process, if known.
+The number of the passed tests (including failure-ignored tests but
+excluding skipped tests) within the process, if known.
 
 =item skipped : Integer?
 

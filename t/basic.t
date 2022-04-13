@@ -22,9 +22,10 @@ Test {
       is $json->{result}->{json_file}, 'result.json';
       is 0+@{$json->{files}}, 1;
       is $json->{files}->[0]->{file_name_path}, 't/abc.t';
+      is $json->{rule}->{max_consecutive_failures}, undef;
     } $c;
   });
-} n => 8, name => 'No arguments';
+} n => 9, name => 'No arguments';
 
 Test {
   my $c = shift;
