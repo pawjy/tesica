@@ -17,13 +17,14 @@ Test {
       is $return->{result}->exit_code, $json->{result}->{exit_code};
       is $json->{rule}->{base_dir}, $return->{base_path}->absolute->stringify;
       is $json->{rule}->{result_dir}, $return->{base_path}->child ('local/test')->absolute->stringify;
+      is $json->{rule}->{manifest_file}, undef;
       is $json->{result}->{exit_code}, 0;
       is $json->{result}->{json_file}, 'result.json';
       is 0+@{$json->{files}}, 1;
       is $json->{files}->[0]->{file_name_path}, 't/abc.t';
     } $c;
   });
-} n => 7, name => 'No arguments';
+} n => 8, name => 'No arguments';
 
 Test {
   my $c = shift;

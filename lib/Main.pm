@@ -264,13 +264,27 @@ sub main ($@) {
   my ($class, @args) = @_;
   
   my $rule = {};
-  my $env = {executors => {}};
+  my $env = {executors => {}, write_result => sub { }};
 
   my $result = {result => {exit_code => 1, pass => 0, fail => 0},
                 times => {start => time},
                 file_results => {}, executors => {}};
   
   return Promise->resolve->then (sub {
+    my $manifest_file_name = $ENV{TESICA_MANIFEST_FILE} // '';
+    return unless length $manifest_file_name;
+
+    my $manifest_path = path ($manifest_file_name)->absolute;
+    $result->{rule}->{manifest_file} = $manifest_path . '';
+    my $manifest_file = Promised::File->new_from_path ($manifest_path);
+    return $manifest_file->read_byte_string->then (sub {
+      my $json = json_bytes2perl $_[0];
+      unless (defined $json and ref $json eq 'HASH') {
+        die "Manifest file |$manifest_path| is not a JSON object\n";
+      }
+      $env->{manifest} = $json;
+    });
+  })->then (sub {
     $rule->{base_dir} = '.' unless defined $rule->{base_dir};
     $env->{base_dir_path} = path ($rule->{base_dir})->absolute;
     $result->{rule}->{base_dir} = '' . $env->{base_dir_path};
@@ -325,7 +339,7 @@ sub main ($@) {
     return $env->{write_result}->();
   })->then (sub {
     warn sprintf "Result: |%s|\n",
-        $env->{result_json_path};
+        $env->{result_json_path} if defined $env->{result_json_path};
     warn sprintf "Pass: %d, Fail: %d\n",
         $result->{result}->{pass}, $result->{result}->{fail};
     if ($result->{result}->{exit_code} == 0) {

@@ -23,10 +23,40 @@ name ends by C<.t> contained directly or indirectly, without following
 symlinks, in the C<t> directory under the base directory are the test
 scripts to be used.
 
-=head1 RESULT FILE
+=head1 TEST MANIFEST FILE
 
-The result is written to the C<local/test/result.json>, which is a
-JSON file of a JSON object with following name/value pairs:
+A set of detailed test options can be specified as a test manifest
+file.
+
+The environment variable C<TESICA_MANIFEST_FILE> can be used to
+specify the path to the test manifest file (relative to the current
+directory).
+
+A test manifest file is a UTF-8 encoded JSON object with following
+name/value pairs:
+
+=over 4
+
+XXX
+
+=back
+
+=head1 TEST RESULTS
+
+Test results are put into the test result directory.
+
+If the environment variable C<CIRCLE_ARTIFACTS> is specified, the test
+result directory is set to that value.
+
+Otherwise, the test result directory is set to the C<local/test>
+subdirectory in the base directory, which is defaulted to the current
+directory.
+
+=head2 Result file
+
+The summary of the test result is written to the C<result.json> file
+in the test result directory (C<./local/test/result.json> by default),
+which is a JSON file of a JSON object with following name/value pairs:
 
 =over 4
 
@@ -39,6 +69,14 @@ A JSON object with following name/value pairs:
 =item base_dir : String
 
 The absolute path of the base directory.
+
+=item manifest_file : String?
+
+The absolute path of the test manifest file, if any.
+
+=item result_dir : String
+
+The absolute path of the test result directory.
 
 =back
 
@@ -254,6 +292,12 @@ The number of the passed tests within the process, if known.
 
 
 =back
+
+=head1 ENVIRONMENT VARIABLES
+
+C<CIRCLE_ARTIFACTS>: See L</TEST RESULTS>.
+
+C<TESICA_MANIFEST_FILE>: See L</TEST MANIFEST FILE>.
 
 =head1 AUTHOR
 
