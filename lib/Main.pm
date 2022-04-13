@@ -239,14 +239,16 @@ sub process_files ($$$) {
       $fr->{result}->{exit_code} = $cr->exit_code;
       die $cr unless $cr->exit_code == 0;
       $fr->{result}->{ok} = 1;
+      $fr->{result}->{completed} = 1;
       $result->{result}->{pass}++;
       warn " PASS\n";
     })->catch (sub {
       my $e = $_[0];
       $fr->{times}->{end} //= time;
       $fr->{error}->{message} = ''.$e;
-      warn " FAIL\n";
+      $fr->{result}->{completed} = 1;
       $result->{result}->{fail}++;
+      warn " FAIL\n";
     })->finally (sub {
       return $output_w->close;
     })->finally (sub {
@@ -299,10 +301,12 @@ sub main ($@) {
       $result->{result}->{exit_code} = 0;
       $result->{result}->{ok} = 1;
     }
+    $result->{result}->{completed} = 1;
   })->catch (sub {
     my $error = $_[0];
     $result->{result}->{error} = '' . $error;
     $result->{result}->{exit_code} = 1;
+    $result->{result}->{completed} = 1;
     warn "ERROR: $error\n";
   })->then (sub {
     $result->{times}->{end} = time;

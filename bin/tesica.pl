@@ -180,6 +180,16 @@ name/value pairs:
 
 =over 4
 
+=item completed : Boolean
+
+Whether the process has been completed or not.
+
+If true, completed.  The other fields of the object renresent the
+final result.
+
+If false, not completed yet.  The other fields of the object represent
+the preliminary result.  Their values might be updated later.
+
 =item exit_code : Integer?
 
 The exit code of the process, if a process is executed.  The exit code
