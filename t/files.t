@@ -60,6 +60,7 @@ for (
         my $json = $return->{json};
         is $return->{result}->exit_code, $json->{result}->{exit_code};
         is $json->{result}->{exit_code}, 0;
+        ok $json->{result}->{completed};
         is join ($;, map { $_->{file_name_path} } @{$json->{files}}),
            join ($;, sort { $a cmp $b } @$expected);
         ok $json->{times}->{start};
@@ -67,7 +68,7 @@ for (
         ok $json->{times}->{start} < $json->{times}->{end};
       } $c;
     });
-  } n => 6, name => ['no argument default', @$expected];
+  } n => 7, name => ['no argument default', @$expected];
 }
 
 for (
@@ -211,6 +212,7 @@ Test {
       is $json->{files}->[0]->{file_name_path}, 'abc.t';
       is $json->{files}->[1]->{file_name_path}, 'def.t';
       is $json->{result}->{exit_code}, 1;
+      ok $json->{result}->{completed};
       ok ! $json->{result}->{ok};
       is $json->{result}->{fail}, 1;
       is $json->{result}->{pass}, 1;
@@ -228,7 +230,7 @@ Test {
          < $json->{file_results}->{'def.t'}->{times}->{end};
     } $c;
   });
-} n => 18, name => ['one of specified files not found'];
+} n => 19, name => ['one of specified files not found'];
 
 Test {
   my $c = shift;
@@ -345,9 +347,10 @@ Test {
       ok $json->{file_results}->{'def.t'}->{times}->{start};
       ok $json->{file_results}->{'def.t'}->{times}->{start}
          < $json->{file_results}->{'def.t'}->{times}->{end};
+      ok $json->{file_results}->{'def.t'}->{result}->{completed};
     } $c;
   });
-} n => 20, name => ['one of directory not readable'];
+} n => 21, name => ['one of directory not readable'];
 
 Test {
   my $c = shift;

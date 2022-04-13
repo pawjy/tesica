@@ -122,7 +122,15 @@ sub run (%) {
   })->then (sub {
     return $cmd->run;
   })->then (sub {
+    if ($args{kill_after}) {
+      promised_sleep ($args{kill_after})->then (sub {
+        $cmd->send_signal ('TERM');
+      });
+    }
     return $cmd->wait;
+  })->catch (sub {
+    my $e = $_[0];
+    return $e;
   })->then (sub {
     my $result = $_[0];
     my $return = {
