@@ -123,7 +123,7 @@ sub filter_files ($$) {
     if ($file->{error}) {
       push @$out_files, $file;
     } elsif ($skipped->{$file->{path}}) {
-      $file->{error} = {message => 'Skipped by request'};
+      $file->{error} = {message => 'Skipped by request', ignored => 1};
       push @$out_files, $file;
     } else {
       my $ext = undef;
@@ -166,6 +166,14 @@ sub load_executors ($$) {
 
 sub process_files ($$$) {
   my ($env, $file_paths, $result) = @_;
+
+  my $failure_allowed = {};
+  if (ref $env->{manifest}->{allow_failure} eq 'ARRAY') {
+    for (@{$env->{manifest}->{allow_failure}}) {
+      my $path = path_full $env->{manifest_base_path}->child ($_);
+      $failure_allowed->{$path} = 1;
+    }
+  }
 
   my $count = 0+@$file_paths;
   my $n = 0;
@@ -269,8 +277,15 @@ sub process_files ($$$) {
       $fr->{times}->{end} //= time;
       $fr->{error}->{message} = ''.$e;
       $fr->{result}->{completed} = 1;
-      $result->{result}->{fail}++;
-      warn " FAIL\n";
+      if ($failure_allowed->{$file->{path}}) {
+        $result->{result}->{pass}++;
+        $result->{result}->{failure_ignored}++;
+        $fr->{error}->{ignored} = 1;
+        warn " FAIL (ignored)\n";
+      } else {
+        $result->{result}->{fail}++;
+        warn " FAIL\n";
+      }
     })->finally (sub {
       return $output_w->close;
     })->finally (sub {
@@ -290,7 +305,7 @@ sub main ($@) {
              manifest => {}};
 
   my $result = {result => {exit_code => 1, pass => 0, fail => 0,
-                           skipped => 0},
+                           skipped => 0, failure_ignored => 0},
                 times => {start => time},
                 file_results => {}, executors => {}};
   
@@ -367,10 +382,12 @@ sub main ($@) {
         $env->{result_json_path} if defined $env->{result_json_path};
     warn sprintf "Pass: %d, Fail: %d\n",
         $result->{result}->{pass}, $result->{result}->{fail};
-    if ($result->{result}->{skipped}) {
-      warn sprintf "(Passed: %d, Skipped: %d)\n",
-          $result->{result}->{pass} - $result->{result}->{skipped},
-          $result->{result}->{skipped};
+    if ($result->{result}->{skipped} or
+        $result->{result}->{failure_ignored}) {
+      warn sprintf "(Passed: %d, Skipped: %d, Allowed failures: %d)\n",
+          $result->{result}->{pass} - $result->{result}->{skipped} - $result->{result}->{failure_ignored},
+          $result->{result}->{skipped},
+          $result->{result}->{failure_ignored};
     }
     if ($result->{result}->{exit_code} == 0) {
       warn "Test passed\n";

@@ -72,11 +72,12 @@ Test {
       is $json->{file_results}->{'t/def.t'}->{result}->{exit_code}, 1;
       ok ! $json->{file_results}->{'t/def.t'}->{result}->{ok};
       is $json->{file_results}->{'t/def.t'}->{error}->{message}, 'Exit code 1';
+      ok ! $json->{file_results}->{'t/def.t'}->{error}->{ignored};
 
       ok ! $json->{result}->{ok};
     } $c;
   });
-} n => 11, name => ['success and failure'];
+} n => 12, name => ['success and failure'];
 
 Test {
   my $c = shift;
