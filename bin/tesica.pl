@@ -37,6 +37,14 @@ name/value pairs:
 
 =over 4
 
+=item allow_failure : Array<String>?
+
+The files whose failures are ignored.  If specified, it must be an
+array of zero or more paths, relative to the test manifest file.
+
+Failure-ignored tests are executed as usual but counted as passed
+tests nevertheless their results.
+
 =item skip : Array<String>?
 
 The files that are skipped.  If specified, it must be an array of zero
@@ -112,6 +120,10 @@ corresponding results, with following name/value pairs:
 
 =over 4
 
+=item error : Error?
+
+The error of the process of the test script, if any.
+
 =item executor : Executor?
 
 The description of the test executor used for the file, if any.
@@ -149,6 +161,22 @@ A boolean value.  False is represented by one of: a JSON number 0, an
 empty String, a JSON false value, a JSON null value, or omission of
 the name/value pair if the context is the value of a name/value pair
 of an Object.  True is represented by a non-false value.
+
+=item Error
+
+An Object representing an error, with following name/value pairs:
+
+=over 4
+
+=item ignored : Boolean
+
+Whether the error is ignored or not.
+
+=item message : String
+
+A short string that summarizes the error.
+
+=back
 
 =item Executor
 
@@ -241,7 +269,12 @@ there is no problem detected.
 
 =item fail : Integer?
 
-The number of the failed tests within the process, if known.
+The number of the failed tests (except for skipped and failure-ignored
+tests) within the process, if known.
+
+=item failure_ignored : Integer?
+
+The number of the failure-ignored tests within the process, if known.
 
 =item json_file : Path (global result only)
 
@@ -291,7 +324,12 @@ descriptor integer.
 
 =item pass : Integer?
 
-The number of the passed tests within the process, if known.
+The number of the passed tests (including skipped and failure-ignored
+tests) within the process, if known.
+
+=item skipped : Integer?
+
+The number of the skipped tests within the process, if known.
 
 =back
 

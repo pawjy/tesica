@@ -427,6 +427,7 @@ Test {
       is $json->{result}->{pass}, 2;
       is $json->{result}->{fail}, 0;
       is $json->{result}->{skipped}, 0;
+      is $json->{result}->{failure_ignored}, 0;
       is 0+@{$json->{files}}, 2;
       is $json->{files}->[0]->{file_name_path}, 't/abc.t';
       ok $json->{file_results}->{'t/abc.t'}->{result}->{ok};
@@ -434,7 +435,7 @@ Test {
       ok $json->{file_results}->{'t/def.t'}->{result}->{ok};
     } $c;
   });
-} n => 9, name => 'skipped none';
+} n => 10, name => 'skipped none';
 
 Test {
   my $c = shift;
@@ -455,15 +456,17 @@ Test {
       is $json->{result}->{pass}, 2;
       is $json->{result}->{fail}, 0;
       is $json->{result}->{skipped}, 1;
+      is $json->{result}->{failure_ignored}, 0;
       is 0+@{$json->{files}}, 2;
       is $json->{files}->[0]->{file_name_path}, 't/abc.t';
       ok ! $json->{file_results}->{'t/abc.t'}->{result}->{ok};
       is $json->{file_results}->{'t/abc.t'}->{error}->{message}, 'Skipped by request';
+      ok $json->{file_results}->{'t/abc.t'}->{error}->{ignored};
       is $json->{files}->[1]->{file_name_path}, 't/def.t';
       ok $json->{file_results}->{'t/def.t'}->{result}->{ok};
     } $c;
   });
-} n => 10, name => 'skipped some';
+} n => 12, name => 'skipped some';
 
 Test {
   my $c = shift;
@@ -493,6 +496,39 @@ Test {
     } $c;
   });
 } n => 10, name => 'skipped some';
+
+Test {
+  my $c = shift;
+  return run (
+    manifest => 'foo/bar/manifest.json',
+    files => {
+      't/abc.t' => {perl_test => 'ng'},
+      't/def.t' => {perl_test => 1},
+      'foo/bar/manifest.json' => {json => {
+        allow_failure => ['../../t/abc.t', 'def.t', 'foo/bar.t'],
+      }},
+    },
+  )->then (sub {
+    my $return = $_[0];
+    test {
+      my $json = $return->{json};
+      is $json->{result}->{exit_code}, 0;
+      is $json->{result}->{pass}, 2;
+      is $json->{result}->{fail}, 0;
+      is $json->{result}->{skipped}, 0;
+      is $json->{result}->{failure_ignored}, 1;
+      is 0+@{$json->{files}}, 2;
+      is $json->{files}->[0]->{file_name_path}, 't/abc.t';
+      ok ! $json->{file_results}->{'t/abc.t'}->{result}->{ok};
+      is $json->{file_results}->{'t/abc.t'}->{error}->{message}, 'Exit code 1';
+      ok $json->{file_results}->{'t/abc.t'}->{error}->{ignored};
+      is $json->{files}->[1]->{file_name_path}, 't/def.t';
+      ok $json->{file_results}->{'t/def.t'}->{result}->{ok};
+      like $return->{stderr}, qr{FAIL \(ignored\)};
+      like $return->{stderr}, qr{Allowed failures: 1};
+    } $c;
+  });
+} n => 14, name => 'allow_failure some';
 
 run_tests;
 
