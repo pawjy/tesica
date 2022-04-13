@@ -45,6 +45,12 @@ array of zero or more paths, relative to the test manifest file.
 Failure-ignored tests are executed as usual but counted as passed
 tests nevertheless their results.
 
+=item max_consecutive_failures : Integer?
+
+The number of maximum allowed consecutive failures.  If specified and
+there are more consecutive failing test scripts than that number, any
+following test scripts are skipped.
+
 =item skip : Array<String>?
 
 The files that are skipped.  If specified, it must be an array of zero
@@ -86,6 +92,10 @@ The absolute path of the base directory.
 =item manifest_file : String?
 
 The absolute path of the test manifest file, if any.
+
+=item max_consecutive_failures : Integer?
+
+The number of allowed maximum consecutive failures, if specified.
 
 =item result_dir : String
 
@@ -324,8 +334,8 @@ descriptor integer.
 
 =item pass : Integer?
 
-The number of the passed tests (including skipped and failure-ignored
-tests) within the process, if known.
+The number of the passed tests (including failure-ignored tests but
+excluding skipped tests) within the process, if known.
 
 =item skipped : Integer?
 
