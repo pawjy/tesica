@@ -37,7 +37,12 @@ name/value pairs:
 
 =over 4
 
-XXX
+=item skip : Array<String>?
+
+The files that are skipped.  If specified, it must be an array of zero
+or more paths, relative to the test manifest file.
+
+Skipped tests are not executed at all but counted as passed tests.
 
 =back
 

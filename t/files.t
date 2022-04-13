@@ -408,6 +408,92 @@ Test {
   });
 } n => 14, name => ['artifacts'];
 
+Test {
+  my $c = shift;
+  return run (
+    manifest => 'manifest.json',
+    files => {
+      't/abc.t' => {perl_test => 1},
+      't/def.t' => {perl_test => 1},
+      'manifest.json' => {json => {
+        skip => [],
+      }},
+    },
+  )->then (sub {
+    my $return = $_[0];
+    test {
+      my $json = $return->{json};
+      is $json->{result}->{exit_code}, 0;
+      is $json->{result}->{pass}, 2;
+      is $json->{result}->{fail}, 0;
+      is $json->{result}->{skipped}, 0;
+      is 0+@{$json->{files}}, 2;
+      is $json->{files}->[0]->{file_name_path}, 't/abc.t';
+      ok $json->{file_results}->{'t/abc.t'}->{result}->{ok};
+      is $json->{files}->[1]->{file_name_path}, 't/def.t';
+      ok $json->{file_results}->{'t/def.t'}->{result}->{ok};
+    } $c;
+  });
+} n => 9, name => 'skipped none';
+
+Test {
+  my $c = shift;
+  return run (
+    manifest => 'manifest.json',
+    files => {
+      't/abc.t' => {perl_test => 0},
+      't/def.t' => {perl_test => 1},
+      'manifest.json' => {json => {
+        skip => ['./t/abc.t', 'def.t'],
+      }},
+    },
+  )->then (sub {
+    my $return = $_[0];
+    test {
+      my $json = $return->{json};
+      is $json->{result}->{exit_code}, 0;
+      is $json->{result}->{pass}, 2;
+      is $json->{result}->{fail}, 0;
+      is $json->{result}->{skipped}, 1;
+      is 0+@{$json->{files}}, 2;
+      is $json->{files}->[0]->{file_name_path}, 't/abc.t';
+      ok ! $json->{file_results}->{'t/abc.t'}->{result}->{ok};
+      is $json->{file_results}->{'t/abc.t'}->{error}->{message}, 'Skipped by request';
+      is $json->{files}->[1]->{file_name_path}, 't/def.t';
+      ok $json->{file_results}->{'t/def.t'}->{result}->{ok};
+    } $c;
+  });
+} n => 10, name => 'skipped some';
+
+Test {
+  my $c = shift;
+  return run (
+    manifest => 'foo/bar/manifest.json',
+    files => {
+      't/abc.t' => {perl_test => 0},
+      't/def.t' => {perl_test => 1},
+      'foo/bar/manifest.json' => {json => {
+        skip => ['../../t/abc.t', 'def.t', 'foo/bar.t'],
+      }},
+    },
+  )->then (sub {
+    my $return = $_[0];
+    test {
+      my $json = $return->{json};
+      is $json->{result}->{exit_code}, 0;
+      is $json->{result}->{pass}, 2;
+      is $json->{result}->{fail}, 0;
+      is $json->{result}->{skipped}, 1;
+      is 0+@{$json->{files}}, 2;
+      is $json->{files}->[0]->{file_name_path}, 't/abc.t';
+      ok ! $json->{file_results}->{'t/abc.t'}->{result}->{ok};
+      is $json->{file_results}->{'t/abc.t'}->{error}->{message}, 'Skipped by request';
+      is $json->{files}->[1]->{file_name_path}, 't/def.t';
+      ok $json->{file_results}->{'t/def.t'}->{result}->{ok};
+    } $c;
+  });
+} n => 10, name => 'skipped some';
+
 run_tests;
 
 =head1 LICENSE

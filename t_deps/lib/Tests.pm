@@ -151,6 +151,8 @@ sub run (%) {
       stdout => $stdout,
       stderr => $stderr,
     };
+    #warn $stdout;
+    #warn $stderr;
 
     $return->{file_bytes} = sub {
       my $base_path = path ($return->{json}->{rule}->{result_dir});

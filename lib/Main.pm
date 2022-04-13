@@ -23,6 +23,11 @@ for my $xtype (sort { $a cmp $b } keys %$Executors) {
   }
 }
 
+sub path_full ($) {
+  my $path = shift;
+  return eval { $path->realpath } || $path->absolute;
+} # path_full
+
 sub _files ($$$$);
 sub _files ($$$$) {
   my ($base, $names, $files, $is_sub) = @_;
@@ -100,13 +105,25 @@ sub expand_files ($$) {
   });
 } # expand_files
 
-sub filter_files ($) {
-  my $in_files = shift;
+sub filter_files ($$) {
+  my ($env, $in_files) = @_;
+
+  my $skipped = {};
+  if (ref $env->{manifest}->{skip} eq 'ARRAY') {
+    for (@{$env->{manifest}->{skip}}) {
+      my $path = path_full $env->{manifest_base_path}->child ($_);
+      $skipped->{$path} = 1;
+    }
+  }
+
   my $out_files = [];
   my $found = {};
   for my $file (@$in_files) {
     next if $found->{$file->{path}}++;
     if ($file->{error}) {
+      push @$out_files, $file;
+    } elsif ($skipped->{$file->{path}}) {
+      $file->{error} = {message => 'Skipped by request'};
       push @$out_files, $file;
     } else {
       my $ext = undef;
@@ -151,7 +168,7 @@ sub process_files ($$$) {
   my ($env, $file_paths, $result) = @_;
 
   my $count = 0+@$file_paths;
-  my $n = 1;
+  my $n = 0;
   return promised_for {
     my $file = shift;
     my $file_name = $file->{path}->relative ($env->{base_dir_path});
@@ -160,17 +177,22 @@ sub process_files ($$$) {
       times => {start => time},
     };
 
+    $n++;
     if ($file->{error}) {
       $fr->{times}->{end} = $fr->{times}->{start} = $file->{time};
       $fr->{error} = $file->{error};
-      $result->{result}->{fail}++;
+      if ($file->{error}->{message} eq 'Skipped by request') {
+        $result->{result}->{pass}++;
+        $result->{result}->{skipped}++;
+      } else {
+        $result->{result}->{fail}++;
+      }
       return;
     }
 
     $fr->{executor} = $file->{executor};
 
     print STDERR "$n/$count [$fr->{executor}->{type}] $file_name...";
-    $n++;
 
     #$fr->{executor}->{type} eq 'perl'
     my $xenv = $env->{executors}->{$fr->{executor}->{type}};
@@ -264,9 +286,11 @@ sub main ($@) {
   my ($class, @args) = @_;
   
   my $rule = {};
-  my $env = {executors => {}, write_result => sub { }};
+  my $env = {executors => {}, write_result => sub { },
+             manifest => {}};
 
-  my $result = {result => {exit_code => 1, pass => 0, fail => 0},
+  my $result = {result => {exit_code => 1, pass => 0, fail => 0,
+                           skipped => 0},
                 times => {start => time},
                 file_results => {}, executors => {}};
   
@@ -274,7 +298,7 @@ sub main ($@) {
     my $manifest_file_name = $ENV{TESICA_MANIFEST_FILE} // '';
     return unless length $manifest_file_name;
 
-    my $manifest_path = path ($manifest_file_name)->absolute;
+    my $manifest_path = path_full path ($manifest_file_name);
     $result->{rule}->{manifest_file} = $manifest_path . '';
     my $manifest_file = Promised::File->new_from_path ($manifest_path);
     return $manifest_file->read_byte_string->then (sub {
@@ -283,15 +307,16 @@ sub main ($@) {
         die "Manifest file |$manifest_path| is not a JSON object\n";
       }
       $env->{manifest} = $json;
+      $env->{manifest_base_path} = $manifest_path->parent;
     });
   })->then (sub {
     $rule->{base_dir} = '.' unless defined $rule->{base_dir};
-    $env->{base_dir_path} = path ($rule->{base_dir})->absolute;
+    $env->{base_dir_path} = path_full path ($rule->{base_dir});
     $result->{rule}->{base_dir} = '' . $env->{base_dir_path};
 
     my $ca = $ENV{CIRCLE_ARTIFACTS} // '';
     if (length $ca) {
-      $env->{result_dir_path} = path ($ca)->absolute;
+      $env->{result_dir_path} = path_full path ($ca);
     } else {
       $env->{result_dir_path} = $env->{base_dir_path}->child ('local/test');
     }
@@ -309,7 +334,7 @@ sub main ($@) {
     return expand_files $rule, \@args;
   })->then (sub {
     my $files = $_[0];
-    return filter_files $files;
+    return filter_files $env, $files;
   })->then (sub {
     my $files = $_[0];
     $result->{files} = [map {
@@ -342,6 +367,11 @@ sub main ($@) {
         $env->{result_json_path} if defined $env->{result_json_path};
     warn sprintf "Pass: %d, Fail: %d\n",
         $result->{result}->{pass}, $result->{result}->{fail};
+    if ($result->{result}->{skipped}) {
+      warn sprintf "(Passed: %d, Skipped: %d)\n",
+          $result->{result}->{pass} - $result->{result}->{skipped},
+          $result->{result}->{skipped};
+    }
     if ($result->{result}->{exit_code} == 0) {
       warn "Test passed\n";
     } else {
