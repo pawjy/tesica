@@ -14,7 +14,7 @@ Test {
       }},
       't/abc.t' => {perl_test => 'ok'},
       't/abc2.t' => {bytes => q{
-        open my $file, '>', 'log1.txt';
+        open my $file, '>', $ENV{CIRCLE_ARTIFACTS} . '/log1.txt';
         print $file "xyz";
         close $file;
         sleep 2;

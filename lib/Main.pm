@@ -181,10 +181,10 @@ sub start_log_watching ($$) {
   if (ref $env->{manifest}->{entangled_log_files} eq 'ARRAY') {
     my $channel = 70000;
     for (@{$env->{manifest}->{entangled_log_files}}) {
-      my $path = path ($_)->absolute ($env->{manifest_base_path});
+      my $path = path ($_)->absolute ($env->{result_dir_path});
 
       my $el = {};
-      $el->{file} = $path->relative ($env->{base_dir_path});
+      $el->{file} = $path->relative ($env->{result_dir_path});
       my $ee = {onstdout => sub { }};
       $ee->{channel} = ++$channel;
       $result->{rule}->{entangled_logs}->{$ee->{channel}} = $el;
@@ -314,7 +314,8 @@ sub process_files ($$$) {
         @{$xenv->{perl_command}},
         $file->{path},
       ]);
-
+      $cmd->envs->{CIRCLE_ARTIFACTS} = $env->{result_dir_path};
+      
       my $escaped_name = $file_name;
       $escaped_name =~ s{([^A-Za-z0-9])}{sprintf '_%02X', ord $1}ge;
       my $output_path = $env->{result_dir_path}->child ('files');

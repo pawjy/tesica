@@ -49,7 +49,7 @@ tests nevertheless their results.
 
 The entangled log files, i.e. files whose contents are to be merged
 into the output file.  If specified, it must be an array of zero or
-more paths, relative to the test manifest file.
+more paths, relative to the test result directory.
 
 Any addition to the specified files during the execution of a test
 script is inserted into the output file for the test script.
@@ -112,7 +112,7 @@ the associated Object with following name/value pair:
 
 =over 4
 
-=item file : Path
+=item file : ResultPath
 
 The path to the entangled log file.
 
@@ -182,6 +182,11 @@ The data types used to describe result file content are as follows:
 
 A JSON array whose members are of I<T>.
 
+=item BasePath
+
+A String representing a Unix-style file or directory path, which can
+be resolved relative to the |rule|'s |base_dir|.
+
 =item Boolean
 
 A boolean value.  False is represented by one of: a JSON number 0, an
@@ -229,7 +234,7 @@ An Object representing a file, with following name/value pair:
 
 =over 4
 
-=item file_name_path : Path
+=item file_name_path : BasePath
 
 The path to the file.
 
@@ -273,10 +278,10 @@ A JSON object.
 
 A JSON object whose names are of I<T> and values are of I<U>.
 
-=item Path
+=item ResultPath
 
 A String representing a Unix-style file or directory path, which can
-be resolved relative to the |rule|'s |base_dir|.
+be resolved relative to the |rule|'s |result_dir|.
 
 =item String
 
@@ -335,7 +340,7 @@ tests) within the process, if known.
 
 The number of the failure-ignored tests within the process, if known.
 
-=item json_file : Path (global result only)
+=item json_file : ResultPath (global result only)
 
 The path to the result JSON file.
 
@@ -343,7 +348,7 @@ The path to the result JSON file.
 
 Whether the process is success or not.
 
-=item output_file : Path (file's result only)
+=item output_file : ResultPath (file's result only)
 
 The path to the output file, which contains standard output and
 standard error output of the test script, with any entangled log.
