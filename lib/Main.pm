@@ -190,6 +190,10 @@ sub process_files ($$$) {
   $result->{rule}->{max_consecutive_failures} = $max_cfailure_count
       if $max_cfailure_count;
 
+  my $max_retry_count = 0+($env->{manifest}->{max_retries} || 0);
+  $max_retry_count = 0 unless $max_retry_count > 0;
+  $result->{rule}->{max_retries} = $max_retry_count;
+
   my $count = 0+@$file_paths;
   my $n = 0;
   my $cfailure_count = 0;
@@ -200,6 +204,8 @@ sub process_files ($$$) {
       result => {ok => 0},
       times => {start => time},
     };
+
+    $fr->{executor} = $file->{executor};
 
     $n++;
     if ($file->{error}) {
@@ -220,25 +226,54 @@ sub process_files ($$$) {
       return;
     }
 
-    $fr->{executor} = $file->{executor};
+    my $try = 0;
+    return promised_until {
+      $try++;
+      my $need_retry = 0;
 
-    print STDERR "$n/$count [$fr->{executor}->{type}] $file_name...";
+      if ($try > 1) {
+        printf STDERR "%d/%d [%s] |%s| (retry %d/%s)...",
+            $n, $count, $fr->{executor}->{type}, $file_name,
+            $try-1, $max_retry_count;
+        my $list;
+        if ($try == 2) {
+          $list = [$fr];
+        } else {
+          $list = delete $fr->{tries};
+          push @$list, $fr;
+        }
+        $fr = $result->{file_results}->{$file_name} = {
+          result => {ok => 0},
+          times => {start => time},
+          tries => $list,
+          executor => $fr->{executor},
+        };
+      } else { # first time
+        printf STDERR "%d/%d [%s] |%s|...",
+            $n, $count, $fr->{executor}->{type}, $file_name;
+      }
 
-    #$fr->{executor}->{type} eq 'perl'
-    my $xenv = $env->{executors}->{$fr->{executor}->{type}};
+      #$fr->{executor}->{type} eq 'perl'
+      my $xenv = $env->{executors}->{$fr->{executor}->{type}};
 
-    my $cmd = Promised::Command->new ([
-      @{$xenv->{perl_command}},
-      $file->{path},
-    ]);
+      my $cmd = Promised::Command->new ([
+        @{$xenv->{perl_command}},
+        $file->{path},
+      ]);
 
-    my $escaped_name = $file_name;
-    $escaped_name =~ s{([^A-Za-z0-9])}{sprintf '_%02X', ord $1}ge;
-    my $output_path = $env->{result_dir_path}->child ('files')
-        ->child ($escaped_name . '.txt');
-    $fr->{output_file} = '' . $output_path->relative ($env->{result_dir_path});
-    my $output_ws = Promised::File->new_from_path ($output_path)->write_bytes;
-    my $output_w = $output_ws->get_writer;
+      my $escaped_name = $file_name;
+      $escaped_name =~ s{([^A-Za-z0-9])}{sprintf '_%02X', ord $1}ge;
+      my $output_path = $env->{result_dir_path}->child ('files');
+      if ($try > 1) {
+        $output_path = $output_path->child
+            ($escaped_name . '-' . $try . '.txt');
+      } else {
+        $output_path = $output_path->child ($escaped_name . '.txt');
+      }
+      $fr->{output_file} = ''.$output_path->relative ($env->{result_dir_path});
+      my $output_ws = Promised::File->new_from_path
+          ($output_path)->write_bytes;
+      my $output_w = $output_ws->get_writer;
     my $output_chunk = sub {
       my ($h, $chunk) = @_;
       print STDERR ".";
@@ -283,44 +318,53 @@ sub process_files ($$$) {
         });
       });
     };
-    return $cmd->run->then (sub {
-      return $cmd->wait;
-    })->then (sub {
-      my $cr = $_[0];
-      $fr->{times}->{end} = time;
-      $fr->{result}->{exit_code} = $cr->exit_code;
-      die $cr unless $cr->exit_code == 0;
-      $fr->{result}->{ok} = 1;
-      $fr->{result}->{completed} = 1;
-      $result->{result}->{pass}++;
-      warn sprintf " PASS (%d s)\n",
-          $fr->{times}->{end} - $fr->{times}->{start};
-      $cfailure_count = 0;
-    })->catch (sub {
-      my $e = $_[0];
-      $fr->{times}->{end} //= time;
-      $fr->{error}->{message} = ''.$e;
-      $fr->{result}->{completed} = 1;
-      if ($failure_allowed->{$file->{path}}) {
+      return $cmd->run->then (sub {
+        return $cmd->wait;
+      })->then (sub {
+        my $cr = $_[0];
+        $fr->{times}->{end} = time;
+        $fr->{result}->{exit_code} = $cr->exit_code;
+        die $cr unless $cr->exit_code == 0;
+        $fr->{result}->{ok} = 1;
+        $fr->{result}->{completed} = 1;
         $result->{result}->{pass}++;
-        $result->{result}->{failure_ignored}++;
-        $fr->{error}->{ignored} = 1;
-        warn sprintf " FAIL (%d s, ignored)\n",
-          $fr->{times}->{end} - $fr->{times}->{start};
-      } else {
-        $result->{result}->{fail}++;
-        warn sprintf " FAIL (%d s)\n",
-          $fr->{times}->{end} - $fr->{times}->{start};
-      }
-      $cfailure_count++;
-    })->finally (sub {
-      return $output_w->close;
-    })->finally (sub {
-      return Promise->all (\@wait);
-    })->then (sub {
-      $env->{write_result}->();
-      return undef;
-    });
+        if ($try > 1) {
+          $result->{result}->{pass_after_retry}++;
+        }
+        warn sprintf " pass (%d s)\n",
+            $fr->{times}->{end} - $fr->{times}->{start};
+        $cfailure_count = 0;
+      })->catch (sub {
+        my $e = $_[0];
+        $fr->{times}->{end} //= time;
+        $fr->{error}->{message} = ''.$e;
+        $fr->{result}->{completed} = 1;
+        if ($failure_allowed->{$file->{path}}) {
+          $result->{result}->{pass}++;
+          $result->{result}->{failure_ignored}++;
+          $fr->{error}->{ignored} = 1;
+          warn sprintf " FAIL (%d s, ignored)\n",
+              $fr->{times}->{end} - $fr->{times}->{start};
+        } else {
+          warn sprintf " FAIL (%d s)\n",
+              $fr->{times}->{end} - $fr->{times}->{start};
+          if ($try > $max_retry_count) {
+            $result->{result}->{fail}++;
+          } else {
+            $need_retry = 1;
+            return;
+          }
+        }
+        $cfailure_count++;
+      })->finally (sub {
+        return $output_w->close;
+      })->finally (sub {
+        return Promise->all (\@wait);
+      })->then (sub {
+        $env->{write_result}->();
+        return not $need_retry;
+      });
+    };
   } $file_paths;
 } # process_files
 
@@ -332,7 +376,8 @@ sub main ($@) {
              manifest => {}};
 
   my $result = {result => {exit_code => 1, pass => 0, fail => 0,
-                           skipped => 0, failure_ignored => 0},
+                           skipped => 0, failure_ignored => 0,
+                           pass_after_retry => 0},
                 times => {start => time},
                 file_results => {}, executors => {}};
   
@@ -426,8 +471,10 @@ sub main ($@) {
         $result->{result}->{fail},
         $result->{result}->{skipped},
         $result->{times}->{end} - $result->{times}->{start};
-    if ($result->{result}->{failure_ignored}) {
-      warn sprintf "(Allowed failures: %d)\n",
+    if ($result->{result}->{failure_ignored} or
+        $result->{result}->{pass_after_retry}) {
+      warn sprintf "(Passed after retry: %d, Allowed failures: %d)\n",
+          $result->{result}->{pass_after_retry},
           $result->{result}->{failure_ignored};
     }
     if ($result->{result}->{exit_code} == 0) {

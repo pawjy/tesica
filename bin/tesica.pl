@@ -51,6 +51,12 @@ The number of maximum allowed consecutive failures.  If specified and
 there are more consecutive failing test scripts than that number, any
 following test scripts are skipped.
 
+=item max_retries : Integer?
+
+The maximum number of retries upon failures.  Defaulted to zero.  If a
+test script fails, it is retried at most I<max_retries> times.  If one
+of retries passes, the test script is marked as passed.
+
 =item skip : Array<String>?
 
 The files that are skipped.  If specified, it must be an array of zero
@@ -97,6 +103,10 @@ The absolute path of the test manifest file, if any.
 
 The number of allowed maximum consecutive failures, if specified.
 
+=item max_retries : Integer
+
+The maximum number of retries.
+
 =item result_dir : String
 
 The absolute path of the test result directory.
@@ -123,35 +133,19 @@ used.  Otherwise, C<perl> in the platform's path is used.
 
 An Array of the files of the test scripts.
 
-=item file_results : Object<Path, Object>
+=item file_results : Object<Path, FileResult>
 
 An Object whose names are the paths of the test scripts and values are
-corresponding results, with following name/value pairs:
-
-=over 4
-
-=item error : Error?
-
-The error of the process of the test script, if any.
-
-=item executor : Executor?
-
-The description of the test executor used for the file, if any.
-
-=item times : Times
-
-The timestamps of the process of the test script.
-
-=item result : Result
-
-The result of the process of the test script, referred to as "file
-result".
-
-=back
+corresponding results.
 
 =item result : Result
 
 The result of the entire test, referred to as "global result".
+
+=item tries : Array<FileResult>?
+
+The earlier results of the test script, when it is retried one or more
+times.
 
 =back
 
@@ -209,6 +203,32 @@ An Object representing a file, with following name/value pair:
 =item file_name_path : Path
 
 The path to the file.
+
+=back
+
+=item FileResult
+
+An Object representing a result for a test script, with following
+name/value pairs:
+
+=over 4
+
+=item error : Error?
+
+The error of the process of the test script, if any.
+
+=item executor : Executor?
+
+The description of the test executor used for the test script, if any.
+
+=item times : Times
+
+The timestamps of the process of the test script.
+
+=item result : Result
+
+The result of the process of the test script, referred to as "file's
+result".
 
 =back
 
@@ -294,7 +314,7 @@ The path to the result JSON file.
 
 Whether the process is success or not.
 
-=item output_file : Path (file result only)
+=item output_file : Path (file's result only)
 
 The path to the output file, which contains standard output and
 standard error output of the test script.
@@ -336,6 +356,11 @@ descriptor integer.
 
 The number of the passed tests (including failure-ignored tests but
 excluding skipped tests) within the process, if known.
+
+=item pass_after_retry : Integer?
+
+The number of the passed tests that initially failed but then passed
+when retried, if known.
 
 =item skipped : Integer?
 
