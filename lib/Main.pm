@@ -38,6 +38,16 @@ sub _files ($$$$) {
   my $files2 = [];
   return ((promised_for {
     my $name = $_[0];
+    if (not length $name) {
+      push @$files, {path => path ($base),
+                     file_name => '',
+                     specified => $in_names->{$name},
+                     time => time,
+                     error => {
+                       message => "File not found",
+                     }};
+      return;
+    }
     my $path = path ($name)->absolute ($base);
     my $file = Promised::File->new_from_path ($path);
     return $file->is_file->then (sub {
@@ -372,6 +382,8 @@ sub main ($@) {
     } @$files];
     return load_executors ($env, $result)->then (sub {
       $env->{write_result}->();
+      warn sprintf "Result: |%s|\n",
+          $env->{result_json_path};
       return process_files $env, $files => $result;
     });
   })->then (sub {
