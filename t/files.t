@@ -557,7 +557,7 @@ Test {
       ok $json->{file_results}->{'t/abc.t'}->{error}->{ignored};
       is $json->{files}->[1]->{file_name_path}, 't/def.t';
       ok $json->{file_results}->{'t/def.t'}->{result}->{ok};
-      like $return->{stderr}, qr{FAIL \(ignored\)};
+      like $return->{stderr}, qr{FAIL \([0-9]+ s, ignored\)};
       like $return->{stderr}, qr{Allowed failures: 1};
     } $c;
   });

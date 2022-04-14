@@ -18968,7 +18968,8 @@ $fatpacked{"Main.pm"} = '#line '.(1+__LINE__).' "'.__FILE__."\"\n".<<'MAIN';
         $fr->{result}->{ok} = 1;
         $fr->{result}->{completed} = 1;
         $result->{result}->{pass}++;
-        warn " PASS\n";
+        warn sprintf " PASS (%d s)\n",
+            $fr->{times}->{end} - $fr->{times}->{start};
         $cfailure_count = 0;
       })->catch (sub {
         my $e = $_[0];
@@ -18979,10 +18980,12 @@ $fatpacked{"Main.pm"} = '#line '.(1+__LINE__).' "'.__FILE__."\"\n".<<'MAIN';
           $result->{result}->{pass}++;
           $result->{result}->{failure_ignored}++;
           $fr->{error}->{ignored} = 1;
-          warn " FAIL (ignored)\n";
+          warn sprintf " FAIL (%d s, ignored)\n",
+            $fr->{times}->{end} - $fr->{times}->{start};
         } else {
           $result->{result}->{fail}++;
-          warn " FAIL\n";
+          warn sprintf " FAIL (%d s)\n",
+            $fr->{times}->{end} - $fr->{times}->{start};
         }
         $cfailure_count++;
       })->finally (sub {
@@ -19079,12 +19082,25 @@ $fatpacked{"Main.pm"} = '#line '.(1+__LINE__).' "'.__FILE__."\"\n".<<'MAIN';
       $result->{times}->{end} = time;
       return $env->{write_result}->();
     })->then (sub {
+      if ($result->{result}->{fail}) {
+        my $files = [];
+        for my $name (keys %{$result->{file_results}}) {
+          my $fr = $result->{file_results}->{$name};
+          if (not $fr->{result}->{ok} and
+              not $fr->{error}->{ignored}) {
+            push @$files, $name;
+          }
+        }
+        warn "Failed tests:\n";
+        warn join '', map { "  |$_|\n" } sort { $a cmp $b } @$files;
+      }
       warn sprintf "Result: |%s|\n",
           $env->{result_json_path} if defined $env->{result_json_path};
-      warn sprintf "Pass: %d, Fail: %d, Skipped: %d\n",
+      warn sprintf "Pass: %d, Fail: %d, Skipped: %d (%d s)\n",
           $result->{result}->{pass},
           $result->{result}->{fail},
-          $result->{result}->{skipped};
+          $result->{result}->{skipped},
+          $result->{times}->{end} - $result->{times}->{start};
       if ($result->{result}->{failure_ignored}) {
         warn sprintf "(Allowed failures: %d)\n",
             $result->{result}->{failure_ignored};
