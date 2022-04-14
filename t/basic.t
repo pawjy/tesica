@@ -24,9 +24,10 @@ Test {
       is $json->{files}->[0]->{file_name_path}, 't/abc.t';
       is $json->{rule}->{max_consecutive_failures}, undef;
       is $json->{rule}->{max_retries}, 0;
+      is 0+keys %{$json->{rule}->{entangled_logs}}, 0;
     } $c;
   });
-} n => 10, name => 'No arguments';
+} n => 11, name => 'No arguments';
 
 Test {
   my $c = shift;

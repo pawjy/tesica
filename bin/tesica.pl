@@ -45,6 +45,15 @@ array of zero or more paths, relative to the test manifest file.
 Failure-ignored tests are executed as usual but counted as passed
 tests nevertheless their results.
 
+=item entangled_log_files : Array<String>?
+
+The entangled log files, i.e. files whose contents are to be merged
+into the output file.  If specified, it must be an array of zero or
+more paths, relative to the test manifest file.
+
+Any addition to the specified files during the execution of a test
+script is inserted into the output file for the test script.
+
 =item max_consecutive_failures : Integer?
 
 The number of maximum allowed consecutive failures.  If specified and
@@ -94,6 +103,20 @@ A JSON object with following name/value pairs:
 =item base_dir : String
 
 The absolute path of the base directory.
+
+=item entangled_logs : Object<Channel, Object>
+
+The list of the entangled logs.  It is an Object whose name/value
+pairs are the combination of the channel ID for an entangled log and
+the associated Object with following name/value pair:
+
+=over 4
+
+=item file : Path
+
+The path to the entangled log file.
+
+=back
 
 =item manifest_file : String?
 
@@ -165,6 +188,12 @@ A boolean value.  False is represented by one of: a JSON number 0, an
 empty String, a JSON false value, a JSON null value, or omission of
 the name/value pair if the context is the value of a name/value pair
 of an Object.  True is represented by a non-false value.
+
+=item Channel
+
+An Integer, referred to as channel ID.  Either: C<1> for a standard
+output, C<2> for a standard error output, or an integer that is
+associated with an entangled log file.
 
 =item Error
 
@@ -317,7 +346,7 @@ Whether the process is success or not.
 =item output_file : Path (file's result only)
 
 The path to the output file, which contains standard output and
-standard error output of the test script.
+standard error output of the test script, with any entangled log.
 
 The output file is stored under the C<local/test/files> directory
 within the base directory.
@@ -335,19 +364,20 @@ of the followings:
   timestamp; and
   0x0A byte.
 
-Where a descriptor integer is C<1> (the standard output) or C<2> (the
-standard error output); A size integer is either a non-zero ASCII
-digit followed by zero or more ASCII digits, C<0>, or C<-1>; A
-timestamp is one or more ASCII digits followed by an ASCII "." byte
-followed by one or more ASCII digits.
+Where a descriptor integer is a Channel value; A size integer is
+either a non-zero ASCII digit followed by zero or more ASCII digits,
+C<0>, or C<-1>; A timestamp is one or more ASCII digits followed by an
+ASCII "." byte followed by one or more ASCII digits.
 
 The timestamp represents the time the chunk was received, in decimal
 number of the Unix time.  The timestamp of a chunk is always equal to
 or greater than that of any previous chunk.
 
-the size integer represents the number of the bytes in the chunk body,
+The size integer represents the number of the bytes in the chunk body,
 in decimal integer, when the number is zero or greater, or represents
-the end of the file when the number is C<-1>.
+the end of the file when the number is C<-1>.  Note that there might
+not be any chunk with the size of C<-1> when the file is not closed
+before the end of the execution.
 
 A chunk body is the bytes that belongs to the file identified by the
 descriptor integer.
