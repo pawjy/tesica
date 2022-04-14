@@ -200,6 +200,39 @@ Test {
   my $c = shift;
   return run (
     files => {
+      'abc.t' => {perl_test => 'ok'},
+    },
+    args => ['', 'abc.t', ''],
+  )->then (sub {
+    my $return = $_[0];
+    test {
+      my $json = $return->{json};
+      is $return->{result}->exit_code, 1;
+      is 0+@{$json->{files}}, 2;
+      is $json->{files}->[0]->{file_name_path}, '.';
+      is $json->{files}->[1]->{file_name_path}, 'abc.t';
+      is $json->{result}->{exit_code}, 1;
+      ok ! $json->{result}->{ok};
+      is $json->{result}->{fail}, 1;
+      is $json->{result}->{pass}, 1;
+      is 0+keys %{$json->{file_results}}, 2;
+      ok $json->{file_results}->{'abc.t'}->{result}->{ok};
+      ok $json->{file_results}->{'abc.t'}->{times}->{start};
+      ok $json->{file_results}->{'abc.t'}->{times}->{start} <
+         $json->{file_results}->{'abc.t'}->{times}->{end};
+      ok ! $json->{file_results}->{'.'}->{result}->{ok};
+      is $json->{file_results}->{'.'}->{error}->{message}, 'File not found';
+      ok $json->{file_results}->{'.'}->{times}->{start};
+      is $json->{file_results}->{'.'}->{times}->{start},
+         $json->{file_results}->{'.'}->{times}->{end};
+    } $c;
+  });
+} n => 16, name => ['empty specified'];
+
+Test {
+  my $c = shift;
+  return run (
+    files => {
       'def.t' => {perl_test => 1},
     },
     args => ['abc.t', 'def.t'],
@@ -524,7 +557,7 @@ Test {
       ok $json->{file_results}->{'t/abc.t'}->{error}->{ignored};
       is $json->{files}->[1]->{file_name_path}, 't/def.t';
       ok $json->{file_results}->{'t/def.t'}->{result}->{ok};
-      like $return->{stderr}, qr{FAIL \(ignored\)};
+      like $return->{stderr}, qr{FAIL \([0-9]+ s, ignored\)};
       like $return->{stderr}, qr{Allowed failures: 1};
     } $c;
   });

@@ -38,6 +38,16 @@ sub _files ($$$$) {
   my $files2 = [];
   return ((promised_for {
     my $name = $_[0];
+    if (not length $name) {
+      push @$files, {path => path ($base),
+                     file_name => '',
+                     specified => $in_names->{$name},
+                     time => time,
+                     error => {
+                       message => "File not found",
+                     }};
+      return;
+    }
     my $path = path ($name)->absolute ($base);
     my $file = Promised::File->new_from_path ($path);
     return $file->is_file->then (sub {
@@ -283,7 +293,8 @@ sub process_files ($$$) {
       $fr->{result}->{ok} = 1;
       $fr->{result}->{completed} = 1;
       $result->{result}->{pass}++;
-      warn " PASS\n";
+      warn sprintf " PASS (%d s)\n",
+          $fr->{times}->{end} - $fr->{times}->{start};
       $cfailure_count = 0;
     })->catch (sub {
       my $e = $_[0];
@@ -294,10 +305,12 @@ sub process_files ($$$) {
         $result->{result}->{pass}++;
         $result->{result}->{failure_ignored}++;
         $fr->{error}->{ignored} = 1;
-        warn " FAIL (ignored)\n";
+        warn sprintf " FAIL (%d s, ignored)\n",
+          $fr->{times}->{end} - $fr->{times}->{start};
       } else {
         $result->{result}->{fail}++;
-        warn " FAIL\n";
+        warn sprintf " FAIL (%d s)\n",
+          $fr->{times}->{end} - $fr->{times}->{start};
       }
       $cfailure_count++;
     })->finally (sub {
@@ -372,6 +385,8 @@ sub main ($@) {
     } @$files];
     return load_executors ($env, $result)->then (sub {
       $env->{write_result}->();
+      warn sprintf "Result: |%s|\n",
+          $env->{result_json_path};
       return process_files $env, $files => $result;
     });
   })->then (sub {
@@ -392,12 +407,25 @@ sub main ($@) {
     $result->{times}->{end} = time;
     return $env->{write_result}->();
   })->then (sub {
+    if ($result->{result}->{fail}) {
+      my $files = [];
+      for my $name (keys %{$result->{file_results}}) {
+        my $fr = $result->{file_results}->{$name};
+        if (not $fr->{result}->{ok} and
+            not $fr->{error}->{ignored}) {
+          push @$files, $name;
+        }
+      }
+      warn "Failed tests:\n";
+      warn join '', map { "  |$_|\n" } sort { $a cmp $b } @$files;
+    }
     warn sprintf "Result: |%s|\n",
         $env->{result_json_path} if defined $env->{result_json_path};
-    warn sprintf "Pass: %d, Fail: %d, Skipped: %d\n",
+    warn sprintf "Pass: %d, Fail: %d, Skipped: %d (%d s)\n",
         $result->{result}->{pass},
         $result->{result}->{fail},
-        $result->{result}->{skipped};
+        $result->{result}->{skipped},
+        $result->{times}->{end} - $result->{times}->{start};
     if ($result->{result}->{failure_ignored}) {
       warn sprintf "(Allowed failures: %d)\n",
           $result->{result}->{failure_ignored};
