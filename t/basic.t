@@ -23,9 +23,10 @@ Test {
       is 0+@{$json->{files}}, 1;
       is $json->{files}->[0]->{file_name_path}, 't/abc.t';
       is $json->{rule}->{max_consecutive_failures}, undef;
+      is $json->{rule}->{max_retries}, 0;
     } $c;
   });
-} n => 9, name => 'No arguments';
+} n => 10, name => 'No arguments';
 
 Test {
   my $c = shift;
@@ -69,16 +70,18 @@ Test {
       is $json->{file_results}->{'t/abc.t'}->{result}->{exit_code}, 0;
       is $json->{file_results}->{'t/abc.t'}->{result}->{ok}, 1;
       is $json->{file_results}->{'t/abc.t'}->{error}, undef;
+      is $json->{file_results}->{'t/abc.t'}->{tries}, undef;
       
       is $json->{file_results}->{'t/def.t'}->{result}->{exit_code}, 1;
       ok ! $json->{file_results}->{'t/def.t'}->{result}->{ok};
       is $json->{file_results}->{'t/def.t'}->{error}->{message}, 'Exit code 1';
       ok ! $json->{file_results}->{'t/def.t'}->{error}->{ignored};
+      is $json->{file_results}->{'t/def.t'}->{tries}, undef;
 
       ok ! $json->{result}->{ok};
     } $c;
   });
-} n => 12, name => ['success and failure'];
+} n => 14, name => ['success and failure'];
 
 Test {
   my $c = shift;
