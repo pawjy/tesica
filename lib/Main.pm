@@ -121,7 +121,7 @@ sub filter_files ($$) {
   my $skipped = {};
   if (ref $env->{manifest}->{skip} eq 'ARRAY') {
     for (@{$env->{manifest}->{skip}}) {
-      my $path = path_full $env->{manifest_base_path}->child ($_);
+      my $path = path_full path ($_)->absolute ($env->{manifest_base_path});
       $skipped->{$path} = 1;
     }
   }
@@ -174,13 +174,63 @@ sub load_executors ($$) {
   } [keys %{$env->{executors}}];
 } # load_executors
 
+sub start_log_watching ($$) {
+  my ($env, $result) = @_;
+  my @wait;
+
+  if (ref $env->{manifest}->{entangled_log_files} eq 'ARRAY') {
+    my $channel = 70000;
+    for (@{$env->{manifest}->{entangled_log_files}}) {
+      my $path = path ($_)->absolute ($env->{manifest_base_path});
+
+      my $el = {};
+      $el->{file} = $path->relative ($env->{base_dir_path});
+      my $ee = {onstdout => sub { }};
+      $ee->{channel} = ++$channel;
+      $result->{rule}->{entangled_logs}->{$ee->{channel}} = $el;
+
+      $ee->{cmd} = Promised::Command->new (['tail', '-f', '--retry', '-n', 0, $path]);
+      $ee->{cmd}->propagate_signal (1);
+      my $rs = $ee->{cmd}->get_stdout_stream;
+      my $r = $rs->get_reader ('byob');
+      $ee->{closed} = promised_until {
+        return $r->read (DataView->new (ArrayBuffer->new (1024)))->then (sub {
+          if ($_[0]->{done}) {
+            return 'done';
+          }
+          return $ee->{onstdout}->($_[0]->{value})->then (sub {
+            return not 'done';
+          });
+        });
+      };
+      $ee->{cmd}->stderr (\my $stderr);
+      push @wait, $ee->{cmd}->run;
+      push @{$env->{tails}}, $ee;
+    }
+  }
+
+  return Promise->all (\@wait);
+} # start_log_watching
+
+sub stop_log_watching ($$) {
+  my ($env, $result) = @_;
+  my @wait;
+
+  for my $ee (@{$env->{tails}}) {
+    $ee->{cmd}->send_signal ('TERM');
+    push @wait, $ee->{cmd}->wait, $ee->{closed};
+  }
+
+  return Promise->all ([map { $_->catch (sub { }) } @wait]);
+} # stop_log_watching
+
 sub process_files ($$$) {
   my ($env, $file_paths, $result) = @_;
 
   my $failure_allowed = {};
   if (ref $env->{manifest}->{allow_failure} eq 'ARRAY') {
     for (@{$env->{manifest}->{allow_failure}}) {
-      my $path = path_full $env->{manifest_base_path}->child ($_);
+      my $path = path_full path ($_)->absolute ($env->{manifest_base_path});
       $failure_allowed->{$path} = 1;
     }
   }
@@ -249,6 +299,10 @@ sub process_files ($$$) {
           executor => $fr->{executor},
         };
       } else { # first time
+        printf STDERR "(Pass: %d, Fail: %d)\n",
+            $result->{result}->{pass},
+            $result->{result}->{fail}
+            if ($n % 10) == 0;
         printf STDERR "%d/%d [%s] |%s|...",
             $n, $count, $fr->{executor}->{type}, $file_name;
       }
@@ -274,16 +328,17 @@ sub process_files ($$$) {
       my $output_ws = Promised::File->new_from_path
           ($output_path)->write_bytes;
       my $output_w = $output_ws->get_writer;
-    my $output_chunk = sub {
-      my ($h, $chunk) = @_;
-      print STDERR ".";
-      my $v = sprintf "\x0A&%d %d %.9f\x0A",
-          $h,
-          $chunk->byte_length,
-          time;
-      $output_w->write (DataView->new (ArrayBuffer->new_from_scalarref (\$v)));
-      return $output_w->write ($chunk);
-    };
+      my $output_chunk = sub {
+        my ($h, $chunk) = @_;
+        print STDERR ".";
+        my $v = sprintf "\x0A&%d %d %.9f\x0A",
+            $h,
+            $chunk->byte_length,
+            time;
+        $output_w->write
+            (DataView->new (ArrayBuffer->new_from_scalarref (\$v)));
+        return $output_w->write ($chunk);
+      }; # output_chunk
     my $closed = sub {
       my ($h) = @_;
       my $v = sprintf "\x0A&%d -1 %.9f\x0A",
@@ -318,6 +373,11 @@ sub process_files ($$$) {
         });
       });
     };
+      for my $ee (@{$env->{tails}}) {
+        $ee->{onstdout} = sub {
+          $output_chunk->($ee->{channel}, $_[0]);
+        };
+      }
       return $cmd->run->then (sub {
         return $cmd->wait;
       })->then (sub {
@@ -357,6 +417,9 @@ sub process_files ($$$) {
         }
         $cfailure_count++;
       })->finally (sub {
+        for my $ee (@{$env->{tails}}) {
+          $ee->{onstdout} = sub { };
+        }
         return $output_w->close;
       })->finally (sub {
         return Promise->all (\@wait);
@@ -370,14 +433,16 @@ sub process_files ($$$) {
 
 sub main ($@) {
   my ($class, @args) = @_;
+  my @wait;
   
   my $rule = {};
   my $env = {executors => {}, write_result => sub { },
-             manifest => {}};
+             manifest => {}, tails => []};
 
   my $result = {result => {exit_code => 1, pass => 0, fail => 0,
                            skipped => 0, failure_ignored => 0,
                            pass_after_retry => 0},
+                rule => {entangled_logs => {}},
                 times => {start => time},
                 file_results => {}, executors => {}};
   
@@ -429,6 +494,8 @@ sub main ($@) {
       {file_name_path => '' . $_->{path}->relative ($env->{base_dir_path})};
     } @$files];
     return load_executors ($env, $result)->then (sub {
+      return start_log_watching ($env, $result);
+    })->then (sub {
       $env->{write_result}->();
       warn sprintf "Result: |%s|\n",
           $env->{result_json_path};
@@ -451,6 +518,9 @@ sub main ($@) {
   })->then (sub {
     $result->{times}->{end} = time;
     return $env->{write_result}->();
+  })->finally (sub {
+    push @wait, stop_log_watching ($env, $result);
+    return undef;
   })->then (sub {
     if ($result->{result}->{fail}) {
       my $files = [];
@@ -483,6 +553,8 @@ sub main ($@) {
       warn "Test failed\n";
     }
     return $result;
+  })->finally (sub {
+    return Promise->all (\@wait);
   });
 } # main
 

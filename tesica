@@ -18796,7 +18796,7 @@ $fatpacked{"Main.pm"} = '#line '.(1+__LINE__).' "'.__FILE__."\"\n".<<'MAIN';
     my $skipped = {};
     if (ref $env->{manifest}->{skip} eq 'ARRAY') {
       for (@{$env->{manifest}->{skip}}) {
-        my $path = path_full $env->{manifest_base_path}->child ($_);
+        my $path = path_full path ($_)->absolute ($env->{manifest_base_path});
         $skipped->{$path} = 1;
       }
     }
@@ -18849,13 +18849,63 @@ $fatpacked{"Main.pm"} = '#line '.(1+__LINE__).' "'.__FILE__."\"\n".<<'MAIN';
     } [keys %{$env->{executors}}];
   } # load_executors
   
+  sub start_log_watching ($$) {
+    my ($env, $result) = @_;
+    my @wait;
+  
+    if (ref $env->{manifest}->{entangled_log_files} eq 'ARRAY') {
+      my $channel = 70000;
+      for (@{$env->{manifest}->{entangled_log_files}}) {
+        my $path = path ($_)->absolute ($env->{manifest_base_path});
+  
+        my $el = {};
+        $el->{file} = $path->relative ($env->{base_dir_path});
+        my $ee = {onstdout => sub { }};
+        $ee->{channel} = ++$channel;
+        $result->{rule}->{entangled_logs}->{$ee->{channel}} = $el;
+  
+        $ee->{cmd} = Promised::Command->new (['tail', '-f', '--retry', '-n', 0, $path]);
+        $ee->{cmd}->propagate_signal (1);
+        my $rs = $ee->{cmd}->get_stdout_stream;
+        my $r = $rs->get_reader ('byob');
+        $ee->{closed} = promised_until {
+          return $r->read (DataView->new (ArrayBuffer->new (1024)))->then (sub {
+            if ($_[0]->{done}) {
+              return 'done';
+            }
+            return $ee->{onstdout}->($_[0]->{value})->then (sub {
+              return not 'done';
+            });
+          });
+        };
+        $ee->{cmd}->stderr (\my $stderr);
+        push @wait, $ee->{cmd}->run;
+        push @{$env->{tails}}, $ee;
+      }
+    }
+  
+    return Promise->all (\@wait);
+  } # start_log_watching
+  
+  sub stop_log_watching ($$) {
+    my ($env, $result) = @_;
+    my @wait;
+  
+    for my $ee (@{$env->{tails}}) {
+      $ee->{cmd}->send_signal ('TERM');
+      push @wait, $ee->{cmd}->wait, $ee->{closed};
+    }
+  
+    return Promise->all ([map { $_->catch (sub { }) } @wait]);
+  } # stop_log_watching
+  
   sub process_files ($$$) {
     my ($env, $file_paths, $result) = @_;
   
     my $failure_allowed = {};
     if (ref $env->{manifest}->{allow_failure} eq 'ARRAY') {
       for (@{$env->{manifest}->{allow_failure}}) {
-        my $path = path_full $env->{manifest_base_path}->child ($_);
+        my $path = path_full path ($_)->absolute ($env->{manifest_base_path});
         $failure_allowed->{$path} = 1;
       }
     }
@@ -18924,6 +18974,10 @@ $fatpacked{"Main.pm"} = '#line '.(1+__LINE__).' "'.__FILE__."\"\n".<<'MAIN';
             executor => $fr->{executor},
           };
         } else { # first time
+          printf STDERR "(Pass: %d, Fail: %d)\n",
+              $result->{result}->{pass},
+              $result->{result}->{fail}
+              if ($n % 10) == 0;
           printf STDERR "%d/%d [%s] |%s|...",
               $n, $count, $fr->{executor}->{type}, $file_name;
         }
@@ -18949,16 +19003,17 @@ $fatpacked{"Main.pm"} = '#line '.(1+__LINE__).' "'.__FILE__."\"\n".<<'MAIN';
         my $output_ws = Promised::File->new_from_path
             ($output_path)->write_bytes;
         my $output_w = $output_ws->get_writer;
-      my $output_chunk = sub {
-        my ($h, $chunk) = @_;
-        print STDERR ".";
-        my $v = sprintf "\x0A&%d %d %.9f\x0A",
-            $h,
-            $chunk->byte_length,
-            time;
-        $output_w->write (DataView->new (ArrayBuffer->new_from_scalarref (\$v)));
-        return $output_w->write ($chunk);
-      };
+        my $output_chunk = sub {
+          my ($h, $chunk) = @_;
+          print STDERR ".";
+          my $v = sprintf "\x0A&%d %d %.9f\x0A",
+              $h,
+              $chunk->byte_length,
+              time;
+          $output_w->write
+              (DataView->new (ArrayBuffer->new_from_scalarref (\$v)));
+          return $output_w->write ($chunk);
+        }; # output_chunk
       my $closed = sub {
         my ($h) = @_;
         my $v = sprintf "\x0A&%d -1 %.9f\x0A",
@@ -18993,6 +19048,11 @@ $fatpacked{"Main.pm"} = '#line '.(1+__LINE__).' "'.__FILE__."\"\n".<<'MAIN';
           });
         });
       };
+        for my $ee (@{$env->{tails}}) {
+          $ee->{onstdout} = sub {
+            $output_chunk->($ee->{channel}, $_[0]);
+          };
+        }
         return $cmd->run->then (sub {
           return $cmd->wait;
         })->then (sub {
@@ -19032,6 +19092,9 @@ $fatpacked{"Main.pm"} = '#line '.(1+__LINE__).' "'.__FILE__."\"\n".<<'MAIN';
           }
           $cfailure_count++;
         })->finally (sub {
+          for my $ee (@{$env->{tails}}) {
+            $ee->{onstdout} = sub { };
+          }
           return $output_w->close;
         })->finally (sub {
           return Promise->all (\@wait);
@@ -19045,14 +19108,16 @@ $fatpacked{"Main.pm"} = '#line '.(1+__LINE__).' "'.__FILE__."\"\n".<<'MAIN';
   
   sub main ($@) {
     my ($class, @args) = @_;
+    my @wait;
     
     my $rule = {};
     my $env = {executors => {}, write_result => sub { },
-               manifest => {}};
+               manifest => {}, tails => []};
   
     my $result = {result => {exit_code => 1, pass => 0, fail => 0,
                              skipped => 0, failure_ignored => 0,
                              pass_after_retry => 0},
+                  rule => {entangled_logs => {}},
                   times => {start => time},
                   file_results => {}, executors => {}};
     
@@ -19104,6 +19169,8 @@ $fatpacked{"Main.pm"} = '#line '.(1+__LINE__).' "'.__FILE__."\"\n".<<'MAIN';
         {file_name_path => '' . $_->{path}->relative ($env->{base_dir_path})};
       } @$files];
       return load_executors ($env, $result)->then (sub {
+        return start_log_watching ($env, $result);
+      })->then (sub {
         $env->{write_result}->();
         warn sprintf "Result: |%s|\n",
             $env->{result_json_path};
@@ -19126,6 +19193,9 @@ $fatpacked{"Main.pm"} = '#line '.(1+__LINE__).' "'.__FILE__."\"\n".<<'MAIN';
     })->then (sub {
       $result->{times}->{end} = time;
       return $env->{write_result}->();
+    })->finally (sub {
+      push @wait, stop_log_watching ($env, $result);
+      return undef;
     })->then (sub {
       if ($result->{result}->{fail}) {
         my $files = [];
@@ -19158,6 +19228,8 @@ $fatpacked{"Main.pm"} = '#line '.(1+__LINE__).' "'.__FILE__."\"\n".<<'MAIN';
         warn "Test failed\n";
       }
       return $result;
+    })->finally (sub {
+      return Promise->all (\@wait);
     });
   } # main
   
@@ -29507,6 +29579,15 @@ array of zero or more paths, relative to the test manifest file.
 Failure-ignored tests are executed as usual but counted as passed
 tests nevertheless their results.
 
+=item entangled_log_files : Array<String>?
+
+The entangled log files, i.e. files whose contents are to be merged
+into the output file.  If specified, it must be an array of zero or
+more paths, relative to the test manifest file.
+
+Any addition to the specified files during the execution of a test
+script is inserted into the output file for the test script.
+
 =item max_consecutive_failures : Integer?
 
 The number of maximum allowed consecutive failures.  If specified and
@@ -29556,6 +29637,20 @@ A JSON object with following name/value pairs:
 =item base_dir : String
 
 The absolute path of the base directory.
+
+=item entangled_logs : Object<Channel, Object>
+
+The list of the entangled logs.  It is an Object whose name/value
+pairs are the combination of the channel ID for an entangled log and
+the associated Object with following name/value pair:
+
+=over 4
+
+=item file : Path
+
+The path to the entangled log file.
+
+=back
 
 =item manifest_file : String?
 
@@ -29627,6 +29722,12 @@ A boolean value.  False is represented by one of: a JSON number 0, an
 empty String, a JSON false value, a JSON null value, or omission of
 the name/value pair if the context is the value of a name/value pair
 of an Object.  True is represented by a non-false value.
+
+=item Channel
+
+An Integer, referred to as channel ID.  Either: C<1> for a standard
+output, C<2> for a standard error output, or an integer that is
+associated with an entangled log file.
 
 =item Error
 
@@ -29779,7 +29880,7 @@ Whether the process is success or not.
 =item output_file : Path (file's result only)
 
 The path to the output file, which contains standard output and
-standard error output of the test script.
+standard error output of the test script, with any entangled log.
 
 The output file is stored under the C<local/test/files> directory
 within the base directory.
@@ -29797,19 +29898,20 @@ of the followings:
   timestamp; and
   0x0A byte.
 
-Where a descriptor integer is C<1> (the standard output) or C<2> (the
-standard error output); A size integer is either a non-zero ASCII
-digit followed by zero or more ASCII digits, C<0>, or C<-1>; A
-timestamp is one or more ASCII digits followed by an ASCII "." byte
-followed by one or more ASCII digits.
+Where a descriptor integer is a Channel value; A size integer is
+either a non-zero ASCII digit followed by zero or more ASCII digits,
+C<0>, or C<-1>; A timestamp is one or more ASCII digits followed by an
+ASCII "." byte followed by one or more ASCII digits.
 
 The timestamp represents the time the chunk was received, in decimal
 number of the Unix time.  The timestamp of a chunk is always equal to
 or greater than that of any previous chunk.
 
-the size integer represents the number of the bytes in the chunk body,
+The size integer represents the number of the bytes in the chunk body,
 in decimal integer, when the number is zero or greater, or represents
-the end of the file when the number is C<-1>.
+the end of the file when the number is C<-1>.  Note that there might
+not be any chunk with the size of C<-1> when the file is not closed
+before the end of the execution.
 
 A chunk body is the bytes that belongs to the file identified by the
 descriptor integer.
