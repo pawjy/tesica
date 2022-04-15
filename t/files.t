@@ -526,9 +526,10 @@ Test {
       is $json->{file_results}->{'t/abc.t'}->{error}->{message}, 'Skipped by request';
       is $json->{files}->[1]->{file_name_path}, 't/def.t';
       ok $json->{file_results}->{'t/def.t'}->{result}->{ok};
+      unlike $return->{stderr}, qr{Failed tests:.+t/abc.t}s;
     } $c;
   });
-} n => 10, name => 'skipped some';
+} n => 11, name => 'skipped some';
 
 Test {
   my $c = shift;
@@ -559,9 +560,12 @@ Test {
       ok $json->{file_results}->{'t/def.t'}->{result}->{ok};
       like $return->{stderr}, qr{FAIL \([0-9]+ s, ignored\)};
       like $return->{stderr}, qr{Allowed failures: 1};
+      like $return->{stderr}, qr{Failure-ignored tests:.+t/abc.t}s;
+      unlike $return->{stderr}, qr{Failed tests:.+t/abc.t}s;
+      #warn $return->{stderr};
     } $c;
   });
-} n => 14, name => 'allow_failure some';
+} n => 16, name => 'allow_failure some';
 
 run_tests;
 
