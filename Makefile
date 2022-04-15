@@ -12,7 +12,7 @@ updatenightly: local/bin/pmbp.pl
 	$(GIT) add config
 	$(CURL) -sSLf https://raw.githubusercontent.com/wakaba/ciconfig/master/ciconfig | RUN_GIT=1 REMOVE_UNUSED=1 perl
 	$(MAKE) build
-	$(GIT) add ./tesica
+	$(GIT) add ./tesica viewer
 
 ## ------ Setup ------
 
@@ -35,7 +35,7 @@ pmbp-install: pmbp-upgrade
             --create-perl-command-shortcut @perl \
             --create-perl-command-shortcut @prove
 
-build: build-tesica
+build: build-tesica build-js
 
 build-tesica: deps-fatpack ./tesica
 
@@ -84,6 +84,18 @@ intermediate/AnyEvent-constants.pm:
 	cat local/aec-license.txt >> $@
 	echo '' >> $@
 	echo '=cut' >> $@
+
+build-js: viewer/page-components.js viewer/time.js viewer/unit-number.js
+
+viewer/page-components.js: local/generated
+	$(WGET) -O $@ https://raw.githubusercontent.com/wakaba/html-page-components/master/src/page-components.js
+viewer/time.js: local/generated
+	$(WGET) -O $@ https://raw.githubusercontent.com/wakaba/timejs/master/src/time.js
+viewer/unit-number.js: local/generated
+	$(WGET) -O $@ https://raw.githubusercontent.com/wakaba/html-unit-number/master/src/unit-number.js
+
+local/generated:
+	touch $@
 
 ## ------ Tests ------
 

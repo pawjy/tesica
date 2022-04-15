@@ -1,0 +1,483 @@
+<!DOCTYPE HTML>
+<html lang=en>
+<meta charset=utf-8>
+<title>Test result</title>
+<meta name=robots content="noindex,nofollow,noarchive">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  html {
+    margin: 0;
+    padding: 0;
+    font-size: 80%;
+    line-height: 1;
+    --box-padding: .3em;
+    --ng-color: white;
+    --ng-background-color: red;
+    --ok-color: green;
+    --ok-background-color: white;
+    --dialog-color: black;
+    --dialog-background-color: #eee;
+    --hover-color: black;
+    --hover-background-color: #ffa;
+  }
+  body:not([hidden]) {
+    display: grid;
+  }
+  body {
+    margin: 0;
+    padding: 0;
+    grid-template:
+      "input input" 
+      "summary summary"
+      "menu main" 1fr /
+      20em 1fr
+    ;
+    height: 100vh;
+    width: 100vw;
+  }
+
+  tab-set > section:not(.active) {
+    display: none;
+  }
+  tab-set > section > h1,
+  tab-set > section > header > h1 {
+    display: none;
+  }
+
+  toast-group {
+    position: fixed;
+    bottom: 1em;
+    left: 1em;
+  }
+  toast-box:not([hidden]) {
+    display: flex;
+  }
+  toast-box {
+    border-radius: 1em;
+    color: var(--dialog-color);
+    background: var(--dialog-background-color);
+    min-width: 20em;
+    flex-direction: row-reverse;
+    align-items: center;
+  }
+  toast-box-main:not([hidden]) {
+    display: inline-block;
+  }
+  toast-box-main {
+    padding: .5em;
+    flex: 1;
+  }
+  toast-box-header {
+    margin: .5em;
+  }
+
+  code {
+    font-size: 100%;
+    font-family: monospace;
+  }
+
+  pre > code:not([hidden]) {
+    display: block;
+  }
+  pre > code {
+    padding: var(--box-padding);
+    font-size: 1rem;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+
+  can-copy button {
+    margin-left: .5em;
+    vertical-align: middle;
+  }
+
+  time {
+    --timejs-serialization: dtsjp1;
+  }
+
+  a:hover, a:focus, a:active {
+    color: var(--hover-color);
+    background: var(--hover-background-color);
+  }
+
+  action-status {
+    padding: var(--box-padding);
+    text-align: center;
+  }
+  action-status[status=ng] {
+    color: var(--ng-color);
+    background: var(--ng-background-color);
+  }
+
+  .result-ng {
+    color: var(--ng-color);
+    background: var(--ng-background-color);
+  }
+  .result-ok {
+    color: var(--ok-color);
+    background: var(--ok-background-color);
+  }
+
+  #input:not([hidden]) {
+    display: flex;
+  }
+  #input {
+    width: 100%;
+    flex-wrap: wrap;
+    grid-area: input;
+  }
+  #input > form:not([hidden]) {
+    display: contents;
+  }
+  #input input[type=url] {
+    flex: 1 50em;
+  }
+  #input action-status {
+    flex: 1 20em;
+  }
+
+  #result-summary:not([hidden]) {
+    display: flex;
+  }
+  #result-summary {
+    grid-area: summary;
+  }
+  #result-summary p {
+    margin: 0;
+    padding: var(--box-padding);
+    align-self: center;
+  }
+  #result-summary p:first-child {
+    flex: 1;
+  }
+  #result-summary data {
+    font-size: 150%;
+    font-weight: bolder;
+    vertical-align: middle;
+  }
+
+  #result-files {
+    grid-area: menu;
+    overflow: auto;
+  }
+  #result-files ul {
+    margin: 0;
+    padding: 0;
+  }
+  #result-files li:not([hidden]) {
+    display: block;
+  }
+  #result-files li {
+    margin: 0;
+    padding: 0;
+  }
+  #result-files a:not([hidden]) {
+    display: block;
+  }
+  #result-files a {
+    padding: var(--box-padding);
+    text-decoration: none;
+  }
+  #result-files a:not(:hover):not(:focus):not(:active) {
+    color: inherit;
+    background: transparent;
+  }
+  #result-files li.active a {
+    font-weight: bolder;
+  }
+  #result-files p {
+    margin: 0;
+    padding: var(--box-padding);
+    text-align: end;
+  }
+  #result-files .run-info data[data-field=retryCount]:empty {
+    display: none;
+  }
+  #result-files .run-info data[data-field=retryCount]::after {
+    content: " retries";
+  }
+
+  #result-file-viewer {
+    grid-area: main;
+    overflow: auto;
+  }
+  #result-file-viewer header {
+
+  }
+  #result-file-viewer header h1 {
+    margin: 0;
+    padding: var(--box-padding);
+    font-size: 150%;
+  }
+  #result-file-viewer header .run-info {
+    margin: 0;
+    padding: var(--box-padding);
+    text-align: end;
+  }
+  #result-file-viewer header .error-info {
+    margin: 0;
+    padding: 0;
+  }
+  #result-file-viewer header .error-info action-status:not([hidden]) {
+    display: block;
+    padding: var(--box-padding);
+  }
+
+  #result-file-viewer tab-set > tab-menu > a:not([hidden]) {
+    display: inline-block;
+  }
+  #result-file-viewer tab-set > tab-menu > a:only-child {
+    display: none;
+  }
+  #result-file-viewer tab-set > tab-menu > a {
+    margin: 0;
+    padding: var(--box-padding);
+    min-width: 5em;
+    text-align: center;
+    text-decoration: none;
+    color: inherit;
+    background: transparent;
+  }
+  #result-file-viewer tab-set > tab-menu > a.active {
+    font-weight: bolder;
+  }
+  #result-file-viewer tab-set > section > header {
+    text-align: end;
+  }
+</style>
+<script src="page-components.js" async data-export="$paco $fill"></script>
+<script src="time.js" async data-selector="time"></script>
+<script src="unit-number.js" async></script>
+
+<section id=input is=input-section>
+  <form action=javascript: method=post is=save-data data-saver=openResultFile>
+    <input type=url name=url required>
+    <action-status></action-status>
+    <button type=submit>Open</button>
+  </form>
+</section>
+
+<section id=result-summary hidden>
+  <p data-class-template="result-{okNg}">
+    Passed: <data data-field=result.pass></data>
+    (Retried: <data data-field=result.pass_after_retry></data>,
+     Failure-ignored: <data data-field=result.failure_ignored></data>)
+    Failed: <data data-field=result.fail></data>
+    Skipped: <data data-field=result.skipped></data>
+  <p>
+    <unit-number type=duration data-field=elapsedTime></unit-number>
+    <time data-field=times.start></time>
+  </p>
+</section>
+
+<section id=result-files hidden>
+  <list-container loader=listLoader type=ul hascontainer>
+    <ul></ul>
+    <template data-class-template="result-{okNg} {active}">
+      <a href="javascript:" onclick="selectFile(firstElementChild.textContent)">
+        <code data-field=file.file_name_path></code>
+      </a>
+      <p class=run-info>
+        <data data-field=retryCount></data>
+        <unit-number type=duration data-field=elapsedTime></unit-number>
+    </template>
+  </list-container>
+</section>
+
+<section id=result-file-viewer hidden>
+  <header>
+    <h1 data-class-template="result-{okNg}"><can-copy><code data-field=file.file_name_path></code></can-copy></h1>
+    <p class=run-info>
+      <unit-number type=duration data-field=elapsedTime></unit-number>
+      <time data-field=result.times.start></time>
+    <p class=error-info data-hidden-field=unlessErrorHidden data-filled=hidden>
+      <action-status status=ng><action-status-message data-field=result.error.message></action-status-message></action-status>
+  </header>
+  <list-container loader=listLoader type=tab-set>
+    <tab-set><tab-menu></tab-menu></tab-set>
+    <template>
+      <header>
+        <h1>#<span data-field=tryCount></span></h1>
+        <a data-href-field=outputFileURL target=_blank>Open in new window</a>
+      </header>
+      <pre is=outputFileViewer data-field=outputFileURL></pre>
+    </template>
+  </list-container>
+</section>
+
+<script>
+
+  var defineElement = function (def) {
+    var e = document.createElementNS ('data:,pc', 'element');
+    e.pcDef = def;
+    document.head.appendChild (e);
+
+    if (def.fill) {
+      var e = document.createElementNS ('data:,pc', 'filltype');
+      e.setAttribute ('name', def.name);
+      e.setAttribute ('content', def.fill);
+      document.head.appendChild (e);
+      delete def.fill;
+    }
+  }; // defineElement
+
+  defineElement ({
+    name: 'section',
+    is: 'input-section',
+    props: {
+      pcInit: function () {
+        var u = new  window.URL (location.href);
+        var v = u.searchParams.get ('url');
+        if (v) {
+          var form = this.querySelector ('form');
+          form.elements.url.value = v;
+          setTimeout (() => {
+            form.querySelector ('[type=submit]').click ();
+          }, 100);
+        }
+      }, // pcInit
+    },
+  }); // <section is=input-section>
+
+  var def = document.createElementNS ('data:,pc', 'saver');
+  def.setAttribute ('name', 'openResultFile');
+  def.pcHandler = function () {
+    var url = this.elements.url.value;
+    if (url.match (/\/$/)) {
+      url += 'result.json';
+    }
+    var u = new window.URL (location.href);
+    u.searchParams.set ('url', url);
+    history.replaceState (null, null, u);
+    return fetch (url, {}).then (res => {
+      if (res.status !== 200) throw res;
+      return res.json ();
+    }).then (json => {
+      return showResult (url, json);
+    });
+  };
+  document.head.appendChild (def);
+
+  function showResult (url, json) {
+    var rs = document.querySelector ('#result-summary');
+    json.okNg = json.result.ok ? 'ok' : 'ng';
+    json.elapsedTime = json.times.end - json.times.start;
+    $fill (rs, json);
+    rs.hidden = false;
+
+    var ll = document.querySelector ('#result-files list-container[loader=listLoader]');
+    
+    var selectedFile = {};
+    var fileByName = {};
+    var files = json.files.map (_ => {
+      var file = {file: _};
+      
+      file.result = json.file_results[file.file.file_name_path];
+      if (file.result) {
+        file.okNg = file.result.result.ok ? 'ok' : 'ng';
+        file.elapsedTime = file.result.times.end - file.result.times.start;
+        
+        var tries = (file.result.tries || []).slice ().concat ([file.result]);
+        for (var i = 0; i < tries.length; i++) {
+          tries[i].tryCount = i;
+          tries[i].outputFileURL = new window.URL (tries[i].output_file, url);
+        }
+        file.tries = tries;
+        file.retryCount = tries.length-1;
+        if (file.retryCount < 1) file.retryCount = '';
+      } else {
+        file.retryCount = '';
+      }
+      
+      fileByName[file.file.file_name_path] = file;
+      return file;
+    });
+    window.selectFile = function (fileName) {
+      delete selectedFile.active;
+      selectedFile = fileByName[fileName];
+      selectedFile.active = 'active';
+      ll.load ({});
+
+      var rf = document.querySelector ('#result-file-viewer');
+      rf.hidden = false;
+      selectedFile.unlessErrorHidden = (selectedFile.result && selectedFile.result.error ? undefined : '');
+      $fill (rf, selectedFile);
+
+      var list = rf.querySelector ('list-container[loader=listLoader]');
+      list.list = selectedFile.tries;
+      list.load ({});
+    };
+
+    ll.list = files;
+    ll.load ({});
+  } // showResult
+
+  var def = document.createElementNS ('data:,pc', 'loader');
+  def.setAttribute ('name', 'listLoader');
+  def.pcHandler = function () {
+    var data = this.list || [];
+    return {data};
+  };
+  document.head.appendChild (def);
+
+  defineElement ({
+    name: 'pre',
+    is: 'outputFileViewer',
+    pcActionStatus: true,
+    fill: 'idlattribute',
+    props: {
+      pcInit: function () {
+        var v = this.value;
+        Object.defineProperty (this, 'value', {
+          get: function () {
+            return v;
+          },
+          set: function (newValue) {
+            v = newValue;
+            this.render ();
+          },
+        });
+        this.render ();
+      }, // pcInit
+      render: function () {
+        var url = this.value;
+        if (!url) return this.textContent = '';
+
+        this.innerHTML = '<action-status></action-status>';
+        var as = this.pcActionStatus ();
+        as.start ({stages: ['fetch']});
+        as.stageStart ('fetch');
+        return fetch (url).then (res => {
+          if (res.status !== 200) throw res;
+          return res.text ();
+        }).then (text => {
+          this.innerHTML = '<code></code>';
+          this.firstChild.textContent = text;
+          as.end ({ok: true});
+        }).catch ((e) => {
+          as.end ({error: e});
+        });
+      }, // render
+    },
+  }); // <pre is=outputFileViewer>
+
+</script>
+<!--
+
+Copyright 2022 Wakaba <wakaba@suikawiki.org>.
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public
+License along with this program.  If not, see
+<https://www.gnu.org/licenses/>.
+
+-->
