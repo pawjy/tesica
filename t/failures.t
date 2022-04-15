@@ -64,9 +64,10 @@ Test {
       is $json->{result}->{skipped}, 1;
       is $json->{result}->{failure_ignored}, 0;
       is $json->{rule}->{max_consecutive_failures}, 2;
+      unlike $return->{stderr}, qr{Failed tests:.+t/abc5.t}s;
     } $c;
   });
-} n => 14, name => 'max_consecutive_failures ';
+} n => 15, name => 'max_consecutive_failures ';
 
 Test {
   my $c = shift;

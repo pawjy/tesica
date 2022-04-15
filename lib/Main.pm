@@ -523,17 +523,28 @@ sub main ($@) {
     push @wait, stop_log_watching ($env, $result);
     return undef;
   })->then (sub {
-    if ($result->{result}->{fail}) {
+    {
       my $files = [];
+      my $afs = [];
       for my $name (keys %{$result->{file_results}}) {
         my $fr = $result->{file_results}->{$name};
         if (not $fr->{result}->{ok} and
-            not $fr->{error}->{ignored}) {
+            not $fr->{error}->{ignored} and
+            not $fr->{error}->{message} eq 'Too many failures before this test') {
           push @$files, $name;
+        } elsif (not $fr->{result}->{ok} and
+                 $fr->{error}->{ignored}) {
+          push @$afs, $name;
         }
       }
-      warn "Failed tests:\n";
-      warn join '', map { "  |$_|\n" } sort { $a cmp $b } @$files;
+      if (@$afs) {
+        warn "Failure-ignored tests:\n";
+        warn join '', map { "  |$_|\n" } sort { $a cmp $b } @$afs;
+      }
+      if (@$files) {
+        warn "Failed tests:\n";
+        warn join '', map { "  |$_|\n" } sort { $a cmp $b } @$files;
+      }
     }
     warn sprintf "Result: |%s|\n",
         $env->{result_json_path} if defined $env->{result_json_path};
