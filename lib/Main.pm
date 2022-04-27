@@ -329,9 +329,19 @@ sub process_files ($$$) {
       my $output_ws = Promised::File->new_from_path
           ($output_path)->write_bytes;
       my $output_w = $output_ws->get_writer;
+      my $output_line_count = 0;
       my $output_chunk = sub {
         my ($h, $chunk) = @_;
-        print STDERR ".";
+        $output_line_count++;
+        if ($output_line_count < 10) {
+          print STDERR ".";
+        } elsif ($output_line_count < 100 and $output_line_count % 10 == 0) {
+          print STDERR ":";
+        } elsif ($output_line_count < 1000 and $output_line_count % 100 == 0) {
+          print STDERR "+";
+        } elsif ($output_line_count % 1000 == 0) {
+          print STDERR "*";
+        }
         my $v = sprintf "\x0A&%d %d %.9f\x0A",
             $h,
             $chunk->byte_length,
