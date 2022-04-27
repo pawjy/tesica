@@ -121,7 +121,7 @@ sub filter_files ($$) {
   my $skipped = {};
   if (ref $env->{manifest}->{skip} eq 'ARRAY') {
     for (@{$env->{manifest}->{skip}}) {
-      my $path = path_full path ($_)->absolute ($env->{manifest_base_path});
+      my $path = path_full (length $_ ? path ($_)->absolute ($env->{manifest_base_path}) : $env->{manifest_base_path});
       $skipped->{$path} = 1;
     }
   }
@@ -230,7 +230,7 @@ sub process_files ($$$) {
   my $failure_allowed = {};
   if (ref $env->{manifest}->{allow_failure} eq 'ARRAY') {
     for (@{$env->{manifest}->{allow_failure}}) {
-      my $path = path_full path ($_)->absolute ($env->{manifest_base_path});
+      my $path = path_full (length $_ ? path ($_)->absolute ($env->{manifest_base_path}) : $env->{manifest_base_path});
       $failure_allowed->{$path} = 1;
     }
   }
