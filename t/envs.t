@@ -66,6 +66,7 @@ Test {
       'DRONE_BUILD_LINK' => 'https://drone/12144',
       'DRONE_COMMIT_SHA' => 'agseefewe',
       'DRONE_COMMIT_BRANCH' => 'abcdde',
+      'GITHUB_ACTIONS' => '',
     },
   )->then (sub {
     my $return = $_[0];
@@ -93,6 +94,7 @@ Test {
       'CIRCLE_BUILD_URL' => 'https://drone/12144',
       'CIRCLE_SHA1' => 'agseefewe',
       'CIRCLE_BRANCH' => 'abcdde',
+      'GITHUB_ACTIONS' => '',
     },
   )->then (sub {
     my $return = $_[0];
