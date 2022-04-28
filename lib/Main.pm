@@ -456,9 +456,11 @@ sub main ($@) {
                 rule => {entangled_logs => {}},
                 times => {start => time},
                 file_results => {}, executors => {}};
+
+  $result->{rule}->{envs} = \%ENV;
   
   return Promise->resolve->then (sub {
-    my $manifest_file_name = $ENV{TESICA_MANIFEST_FILE} // '';
+    my $manifest_file_name = $result->{rule}->{envs}->{TESICA_MANIFEST_FILE} // '';
     return unless length $manifest_file_name;
 
     my $manifest_path = path_full path ($manifest_file_name);
@@ -477,7 +479,7 @@ sub main ($@) {
     $env->{base_dir_path} = path_full path ($rule->{base_dir});
     $result->{rule}->{base_dir} = '' . $env->{base_dir_path};
 
-    my $ca = $ENV{CIRCLE_ARTIFACTS} // '';
+    my $ca = $result->{rule}->{envs}->{CIRCLE_ARTIFACTS} // '';
     if (length $ca) {
       $env->{result_dir_path} = path_full path ($ca);
     } else {

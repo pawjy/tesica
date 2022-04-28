@@ -77,6 +77,10 @@ sub run (%) {
     $cmd->envs->{TESICA_MANIFEST_FILE} = $temp_path->child ($args{manifest});
   }
 
+  for my $n (keys %{$args{envs} or {}}) {
+    $cmd->envs->{$n} = $args{envs}->{$n};
+  }
+
   $cmd->stdout (\my $stdout);
   $cmd->stderr (\my $stderr);
 

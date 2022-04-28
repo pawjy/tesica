@@ -71,7 +71,7 @@ local/fatlib-files: local/fatpacker.packlists local/module-list.sh \
 ./tesica: bin/tesica.pl local/fatlib-files
 	echo '#!/usr/bin/env perl' > $@
 	cd local && ./fatpack file ../$< >> ../$@
-	-git diff tesica
+	-git diff tesica | cat
 	perl -c $@
 	chmod u+x $@
 
