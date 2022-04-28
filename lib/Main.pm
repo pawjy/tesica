@@ -23,6 +23,50 @@ for my $xtype (sort { $a cmp $b } keys %$Executors) {
   }
 }
 
+sub set_result_rule ($) {
+  my $result = $_[0];
+
+  my $envs = $result->{rule}->{envs};
+  if ($envs->{CI}) {
+    if ($envs->{GITHUB_ACTIONS}) {
+      $result->{rule}->{repo}->{url} = sprintf q<%s/%s>,
+          $envs->{GITHUB_SERVER_URL}, $envs->{GITHUB_REPOSITORY}
+          if defined $envs->{GITHUB_SERVER_URL} and
+             defined $envs->{GITHUB_REPOSITORY};
+      $result->{rule}->{repo}->{commit} = $envs->{GITHUB_SHA}
+          if defined $envs->{GITHUB_SHA};
+      $result->{rule}->{repo}->{branch} = $envs->{GITHUB_REF_NAME}
+          if defined $envs->{GITHUB_REF_NAME} and
+             defined $envs->{GITHUB_REF_TYPE} and
+             $envs->{GITHUB_REF_TYPE} eq 'branch'; # or tag
+      $result->{rule}->{ci}->{url} = sprintf q<%s/%s/actions/runs/%s>,
+          $envs->{GITHUB_SERVER_URL}, $envs->{GITHUB_REPOSITORY},
+          $envs->{GITHUB_RUN_ID}
+          if defined $envs->{GITHUB_SERVER_URL} and
+             defined $envs->{GITHUB_REPOSITORY} and
+             defined $envs->{GITHUB_RUN_ID};
+    } elsif ($envs->{DRONE}) {
+      $result->{rule}->{repo}->{url} = $envs->{DRONE_REPO_LINK}
+          if defined $envs->{DRONE_REPO_LINK};
+      $result->{rule}->{repo}->{commit} = $envs->{DRONE_COMMIT_SHA}
+          if defined $envs->{DRONE_COMMIT_SHA};
+      $result->{rule}->{repo}->{branch} = $envs->{DRONE_COMMIT_BRANCH}
+          if defined $envs->{DRONE_COMMIT_BRANCH};
+      $result->{rule}->{ci}->{url} = $envs->{DRONE_BUILD_LINK}
+          if defined $envs->{DRONE_BUILD_LINK};
+    } elsif ($envs->{CIRCLECI}) {
+      $result->{rule}->{repo}->{url} = $envs->{CIRCLE_REPOSITORY_URL}
+          if defined $envs->{CIRCLE_REPOSITORY_URL};
+      $result->{rule}->{repo}->{commit} = $envs->{CIRCLE_SHA1}
+          if defined $envs->{CIRCLE_SHA1};
+      $result->{rule}->{repo}->{branch} = $envs->{CIRCLE_BRANCH}
+          if defined $envs->{CIRCLE_BRANCH};
+      $result->{rule}->{ci}->{url} = $envs->{CIRCLE_BUILD_URL}
+          if defined $envs->{CIRCLE_BUILD_URL};
+    }
+  }
+} # set_result_rule
+
 sub path_full ($) {
   my $path = shift;
   return eval { $path->realpath } || $path->absolute;
@@ -457,9 +501,11 @@ sub main ($@) {
                 times => {start => time},
                 file_results => {}, executors => {}};
 
-  $result->{rule}->{envs} = \%ENV;
+  $result->{rule}->{envs} = {%ENV};
   
   return Promise->resolve->then (sub {
+    set_result_rule $result;
+  })->then (sub {
     my $manifest_file_name = $result->{rule}->{envs}->{TESICA_MANIFEST_FILE} // '';
     return unless length $manifest_file_name;
 
