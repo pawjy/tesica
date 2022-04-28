@@ -104,6 +104,11 @@ A JSON object with following name/value pairs:
 
 The absolute path of the base directory.
 
+=item envs : Object<String, String>
+
+The environment variables of the process.  It is an Object whose
+name/value pairs are the environment variable names and their values.
+
 =item entangled_logs : Object<Channel, Object>
 
 The list of the entangled logs.  It is an Object whose name/value
