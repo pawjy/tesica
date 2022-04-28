@@ -121,7 +121,7 @@ sub filter_files ($$) {
   my $skipped = {};
   if (ref $env->{manifest}->{skip} eq 'ARRAY') {
     for (@{$env->{manifest}->{skip}}) {
-      my $path = path_full path ($_)->absolute ($env->{manifest_base_path});
+      my $path = path_full (length $_ ? path ($_)->absolute ($env->{manifest_base_path}) : $env->{manifest_base_path});
       $skipped->{$path} = 1;
     }
   }
@@ -230,7 +230,7 @@ sub process_files ($$$) {
   my $failure_allowed = {};
   if (ref $env->{manifest}->{allow_failure} eq 'ARRAY') {
     for (@{$env->{manifest}->{allow_failure}}) {
-      my $path = path_full path ($_)->absolute ($env->{manifest_base_path});
+      my $path = path_full (length $_ ? path ($_)->absolute ($env->{manifest_base_path}) : $env->{manifest_base_path});
       $failure_allowed->{$path} = 1;
     }
   }
@@ -329,9 +329,19 @@ sub process_files ($$$) {
       my $output_ws = Promised::File->new_from_path
           ($output_path)->write_bytes;
       my $output_w = $output_ws->get_writer;
+      my $output_line_count = 0;
       my $output_chunk = sub {
         my ($h, $chunk) = @_;
-        print STDERR ".";
+        $output_line_count++;
+        if ($output_line_count < 10) {
+          print STDERR ".";
+        } elsif ($output_line_count < 100 and $output_line_count % 10 == 0) {
+          print STDERR ":";
+        } elsif ($output_line_count < 1000 and $output_line_count % 100 == 0) {
+          print STDERR "+";
+        } elsif ($output_line_count % 1000 == 0) {
+          print STDERR "*";
+        }
         my $v = sprintf "\x0A&%d %d %.9f\x0A",
             $h,
             $chunk->byte_length,
