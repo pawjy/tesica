@@ -104,6 +104,21 @@ A JSON object with following name/value pairs:
 
 The absolute path of the base directory.
 
+=item ci : Object?
+
+Information on the CI build the tests belong to.  If the test is
+executed in a supported CI environment (GitHub Actions, Drone CI, and
+CircleCI 2), the following name/value pair is set from the environment
+variables:
+
+=over 4
+
+=item url : String?
+
+The URL of the build, if known.
+
+=back
+
 =item envs : Object<String, String>
 
 The environment variables of the process.  It is an Object whose
@@ -120,6 +135,29 @@ the associated Object with following name/value pair:
 =item file : ResultPath
 
 The path to the entangled log file.
+
+=item repo : Object?
+
+Information on the repository the tests belong to.  If the test is
+executed in a supported CI environment (GitHub Actions, Drone CI, and
+CircleCI 2), the following name/value pairs are set from the
+environment variables:
+
+=over 4
+
+=item branch : String?
+
+The branch name, if known.
+
+=item commit : String?
+
+The commit SHA value, if known.
+
+=item url : String?
+
+The URL of the repository, if known.
+
+=back
 
 =back
 
