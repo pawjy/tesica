@@ -58,15 +58,15 @@ Test {
 
       is $json->{file_results}->{'t/def.t'}->{executor}->{type}, 'perl';
       ok ! $json->{file_results}->{'t/def.t'}->{result}->{ok};
-      is $json->{file_results}->{'t/def.t'}->{error}->{message}, 'Exit code 1';
+      is $json->{file_results}->{'t/def.t'}->{error}->{message}, 'Command |perl|: Exit code 1';
       is 0+@{$json->{file_results}->{'t/def.t'}->{tries}}, 2;
       is $json->{file_results}->{'t/def.t'}->{tries}->[0]->{executor}->{type}, 'perl';
       ok ! $json->{file_results}->{'t/def.t'}->{tries}->[0]->{result}->{ok};
-      is $json->{file_results}->{'t/def.t'}->{tries}->[0]->{error}->{message}, 'Exit code 1';
+      is $json->{file_results}->{'t/def.t'}->{tries}->[0]->{error}->{message}, 'Command |perl|: Exit code 1';
       is $json->{file_results}->{'t/def.t'}->{tries}->[0]->{tries}, undef;
       is $json->{file_results}->{'t/def.t'}->{tries}->[1]->{executor}->{type}, 'perl';
       ok ! $json->{file_results}->{'t/def.t'}->{tries}->[1]->{result}->{ok};
-      is $json->{file_results}->{'t/def.t'}->{tries}->[1]->{error}->{message}, 'Exit code 1';
+      is $json->{file_results}->{'t/def.t'}->{tries}->[1]->{error}->{message}, 'Command |perl|: Exit code 1';
       is $json->{file_results}->{'t/def.t'}->{tries}->[1]->{tries}, undef;
       
       ok $json->{file_results}->{'t/ghi.t'}->{result}->{ok};
@@ -118,7 +118,7 @@ Test {
       is 0+@{$json->{file_results}->{'t/def.t'}->{tries}}, 1;
       is $json->{file_results}->{'t/def.t'}->{tries}->[0]->{executor}->{type}, 'perl';
       ok ! $json->{file_results}->{'t/def.t'}->{tries}->[0]->{result}->{ok};
-      is $json->{file_results}->{'t/def.t'}->{tries}->[0]->{error}->{message}, 'Exit code 1';
+      is $json->{file_results}->{'t/def.t'}->{tries}->[0]->{error}->{message}, 'Command |perl|: Exit code 1';
       is $json->{file_results}->{'t/def.t'}->{tries}->[0]->{tries}, undef;
       
       ok $json->{file_results}->{'t/ghi.t'}->{result}->{ok};
@@ -162,15 +162,15 @@ Test {
       is $json->{file_results}->{'t/abc.t'}->{tries}, undef;
 
       ok ! $json->{file_results}->{'t/def.t'}->{result}->{ok};
-      is $json->{file_results}->{'t/def.t'}->{error}->{message}, 'Exit code 1';
+      is $json->{file_results}->{'t/def.t'}->{error}->{message}, 'Command |perl|: Exit code 1';
       is 0+@{$json->{file_results}->{'t/def.t'}->{tries}}, 2;
 
       ok ! $json->{file_results}->{'t/ghi.t'}->{result}->{ok};
-      is $json->{file_results}->{'t/ghi.t'}->{error}->{message}, 'Exit code 1';
+      is $json->{file_results}->{'t/ghi.t'}->{error}->{message}, 'Command |perl|: Exit code 1';
       is 0+@{$json->{file_results}->{'t/ghi.t'}->{tries}}, 2;
 
       ok ! $json->{file_results}->{'t/jkl.t'}->{result}->{ok};
-      is $json->{file_results}->{'t/jkl.t'}->{error}->{message}, 'Exit code 1';
+      is $json->{file_results}->{'t/jkl.t'}->{error}->{message}, 'Command |perl|: Exit code 1';
       is 0+@{$json->{file_results}->{'t/jkl.t'}->{tries}}, 2;
       
       ok ! $json->{file_results}->{'t/mno.t'}->{result}->{ok};
