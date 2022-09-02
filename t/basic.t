@@ -75,7 +75,7 @@ Test {
       
       is $json->{file_results}->{'t/def.t'}->{result}->{exit_code}, 1;
       ok ! $json->{file_results}->{'t/def.t'}->{result}->{ok};
-      is $json->{file_results}->{'t/def.t'}->{error}->{message}, 'Exit code 1';
+      is $json->{file_results}->{'t/def.t'}->{error}->{message}, 'Command |perl|: Exit code 1';
       ok ! $json->{file_results}->{'t/def.t'}->{error}->{ignored};
       is $json->{file_results}->{'t/def.t'}->{tries}, undef;
 
@@ -102,11 +102,11 @@ Test {
       
       is $json->{file_results}->{'t/abc.t'}->{result}->{exit_code}, 2;
       ok ! $json->{file_results}->{'t/abc.t'}->{result}->{ok};
-      is $json->{file_results}->{'t/abc.t'}->{error}->{message}, 'Exit code 2';
+      is $json->{file_results}->{'t/abc.t'}->{error}->{message}, 'Command |perl|: Exit code 2';
       
       is $json->{file_results}->{'t/def.t'}->{result}->{exit_code}, 1;
       ok ! $json->{file_results}->{'t/def.t'}->{result}->{ok};
-      is $json->{file_results}->{'t/def.t'}->{error}->{message}, 'Exit code 1';
+      is $json->{file_results}->{'t/def.t'}->{error}->{message}, 'Command |perl|: Exit code 1';
 
       ok ! $json->{result}->{ok};
     } $c;

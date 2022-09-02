@@ -27,7 +27,7 @@ Test {
       is 0+@{$json->{files}}, 2;
       is $json->{files}->[0]->{file_name_path}, 't/abc.t';
       ok ! $json->{file_results}->{'t/abc.t'}->{result}->{ok};
-      is $json->{file_results}->{'t/abc.t'}->{error}->{message}, 'Exit code 1';
+      is $json->{file_results}->{'t/abc.t'}->{error}->{message}, 'Command |perl|: Exit code 1';
       ok $json->{file_results}->{'t/abc.t'}->{error}->{ignored};
       is $json->{files}->[1]->{file_name_path}, 't/def.t';
       ok $json->{file_results}->{'t/def.t'}->{result}->{ok};
@@ -63,7 +63,7 @@ Test {
       is 0+@{$json->{files}}, 2;
       is $json->{files}->[0]->{file_name_path}, 't/abc.t';
       ok ! $json->{file_results}->{'t/abc.t'}->{result}->{ok};
-      is $json->{file_results}->{'t/abc.t'}->{error}->{message}, 'Exit code 1';
+      is $json->{file_results}->{'t/abc.t'}->{error}->{message}, 'Command |perl|: Exit code 1';
       ok $json->{file_results}->{'t/abc.t'}->{error}->{ignored};
       is $json->{files}->[1]->{file_name_path}, 't/def.t';
       ok $json->{file_results}->{'t/def.t'}->{result}->{ok};
@@ -168,7 +168,7 @@ Test {
       ok $json->{file_results}->{'t/abc4.t'}->{result}->{ok};
       ok ! $json->{file_results}->{'t/abc5.t'}->{result}->{ok};
       ok $json->{file_results}->{'t/abc6.t'}->{result}->{ok};
-      is $json->{file_results}->{'t/abc5.t'}->{error}->{message}, 'Exit code 1';
+      is $json->{file_results}->{'t/abc5.t'}->{error}->{message}, 'Command |perl|: Exit code 1';
       is $json->{result}->{pass}, 3;
       is $json->{result}->{fail}, 3;
       is $json->{result}->{skipped}, 0;
