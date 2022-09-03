@@ -258,6 +258,14 @@ sub start_log_watching ($$) {
   return Promise->all (\@wait);
 } # start_log_watching
 
+sub log_watching_failure ($$) {
+  my ($env, $code) = @_;
+  for my $ee (@{$env->{tails}}) {
+    $ee->{cmd}->wait->catch ($code);
+  }
+  return undef;
+} # log_watching_failure
+
 sub stop_log_watching ($$) {
   my ($env, $result) = @_;
   my @wait;
@@ -315,7 +323,8 @@ sub process_files ($$$) {
       return;
     }
 
-    if ($max_cfailure_count and $cfailure_count > $max_cfailure_count) {
+    if (($max_cfailure_count and $cfailure_count > $max_cfailure_count) or
+        $env->{terminate}) {
       $fr->{times}->{end} = $fr->{times}->{start} = $file->{time};
       $fr->{error} = {message => 'Too many failures before this test'};
       $result->{result}->{skipped}++;
@@ -560,6 +569,14 @@ sub main ($@) {
       $env->{write_result}->();
       warn sprintf "Result: |%s|\n",
           $env->{result_json_path};
+
+      ## Capture rare error cases
+      log_watching_failure ($env, sub {
+        my $e = $_[0];
+        $env->{terminate} = 1;
+        $env->{global_error} //= $e;
+      });
+
       return process_files $env, $files => $result;
     });
   })->then (sub {
@@ -570,6 +587,7 @@ sub main ($@) {
       $result->{result}->{ok} = 1;
     }
     $result->{result}->{completed} = 1;
+    die $env->{global_error} if defined $env->{global_error};
   })->catch (sub {
     my $error = $_[0];
     $result->{result}->{error} = '' . $error;
