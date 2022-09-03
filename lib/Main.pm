@@ -649,6 +649,10 @@ sub main ($@) {
     return $result;
   })->finally (sub {
     return Promise->all (\@wait);
+  })->finally (sub {
+    for my $ee (@{$env->{tails}}) {
+      %$ee = ();
+    }
   });
 } # main
 
