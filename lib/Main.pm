@@ -11,6 +11,9 @@ use Promised::File;
 use Promised::Command;
 use JSON::PS;
 
+## For fatpack
+Promised::Command->load_modules;
+
 my $Executors = {
   perl => {
     exts => [qw(t)],
@@ -239,18 +242,18 @@ sub start_log_watching ($$) {
       my $r = $rs->get_reader ('byob');
       $ee->{cmd}->stderr (\my $stderr);
       push @wait, my $run = $ee->{cmd}->run;
-      $ee->{closed} = $run->then (sub {
-        return promised_until {
-          return $r->read (DataView->new (ArrayBuffer->new (1024)))->then (sub {
-            if ($_[0]->{done}) {
-              return 'done';
-            }
-            return $ee->{onstdout}->($_[0]->{value})->then (sub {
-              return not 'done';
-            });
+      my $ac = AbortController->new;
+      $ee->{cmd}->wait->catch (sub { $ac->abort });
+      $ee->{closed} = promised_until {
+        return $r->read (DataView->new (ArrayBuffer->new (1024)))->then (sub {
+          if ($_[0]->{done}) {
+            return 'done';
+          }
+          return $ee->{onstdout}->($_[0]->{value})->then (sub {
+            return not 'done';
           });
-        };
-      });
+        });
+      } signal => $ac->signal;
       push @{$env->{tails}}, $ee;
     }
   }
@@ -575,6 +578,7 @@ sub main ($@) {
         my $e = $_[0];
         $env->{terminate} = 1;
         $env->{global_error} //= $e;
+        #XXX abort current test?
       });
 
       return process_files $env, $files => $result;
