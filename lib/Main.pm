@@ -254,6 +254,9 @@ sub start_log_watching ($$) {
           });
         });
       } signal => $ac->signal;
+      $ee->{discard} = sub {
+        $ac->abort;
+      };
       push @{$env->{tails}}, $ee;
     }
   }
@@ -276,6 +279,7 @@ sub stop_log_watching ($$) {
   for my $ee (@{$env->{tails}}) {
     $ee->{cmd}->send_signal ('TERM');
     push @wait, $ee->{cmd}->wait, $ee->{closed};
+    (delete $ee->{discard})->() if defined $ee->{discard};
   }
 
   return Promise->all ([map { $_->catch (sub { }) } @wait]);
