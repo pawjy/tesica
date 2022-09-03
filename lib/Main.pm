@@ -237,18 +237,20 @@ sub start_log_watching ($$) {
       $ee->{cmd}->propagate_signal (1);
       my $rs = $ee->{cmd}->get_stdout_stream;
       my $r = $rs->get_reader ('byob');
-      $ee->{closed} = promised_until {
-        return $r->read (DataView->new (ArrayBuffer->new (1024)))->then (sub {
-          if ($_[0]->{done}) {
-            return 'done';
-          }
-          return $ee->{onstdout}->($_[0]->{value})->then (sub {
-            return not 'done';
-          });
-        });
-      };
       $ee->{cmd}->stderr (\my $stderr);
-      push @wait, $ee->{cmd}->run;
+      push @wait, my $run = $ee->{cmd}->run;
+      $ee->{closed} = $run->then (sub {
+        return promised_until {
+          return $r->read (DataView->new (ArrayBuffer->new (1024)))->then (sub {
+            if ($_[0]->{done}) {
+              return 'done';
+            }
+            return $ee->{onstdout}->($_[0]->{value})->then (sub {
+              return not 'done';
+            });
+          });
+        };
+      });
       push @{$env->{tails}}, $ee;
     }
   }
