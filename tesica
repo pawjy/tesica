@@ -18686,6 +18686,9 @@ $fatpacked{"Main.pm"} = '#line '.(1+__LINE__).' "'.__FILE__."\"\n".<<'MAIN';
   use Promised::Command;
   use JSON::PS;
   
+  ## For fatpack
+  Promised::Command->load_modules;
+  
   my $Executors = {
     perl => {
       exts => [qw(t)],
@@ -18914,18 +18917,18 @@ $fatpacked{"Main.pm"} = '#line '.(1+__LINE__).' "'.__FILE__."\"\n".<<'MAIN';
         my $r = $rs->get_reader ('byob');
         $ee->{cmd}->stderr (\my $stderr);
         push @wait, my $run = $ee->{cmd}->run;
-        $ee->{closed} = $run->then (sub {
-          return promised_until {
-            return $r->read (DataView->new (ArrayBuffer->new (1024)))->then (sub {
-              if ($_[0]->{done}) {
-                return 'done';
-              }
-              return $ee->{onstdout}->($_[0]->{value})->then (sub {
-                return not 'done';
-              });
+        my $ac = AbortController->new;
+        $ee->{cmd}->wait->catch (sub { $ac->abort });
+        $ee->{closed} = promised_until {
+          return $r->read (DataView->new (ArrayBuffer->new (1024)))->then (sub {
+            if ($_[0]->{done}) {
+              return 'done';
+            }
+            return $ee->{onstdout}->($_[0]->{value})->then (sub {
+              return not 'done';
             });
-          };
-        });
+          });
+        } signal => $ac->signal;
         push @{$env->{tails}}, $ee;
       }
     }
@@ -19250,6 +19253,7 @@ $fatpacked{"Main.pm"} = '#line '.(1+__LINE__).' "'.__FILE__."\"\n".<<'MAIN';
           my $e = $_[0];
           $env->{terminate} = 1;
           $env->{global_error} //= $e;
+          #XXX abort current test?
         });
   
         return process_files $env, $files => $result;
@@ -23249,6 +23253,18 @@ $fatpacked{"Promised/Command.pm"} = '#line '.(1+__LINE__).' "'.__FILE__."\"\n".<
   my $DEBUG = $ENV{PROMISED_COMMAND_DEBUG};
   my $CommandID = int rand 10000;
   
+  sub load_modules () {
+    require Carp;
+    require WritableStream;
+    require Streams::Filehandle;
+    require Streams::_Common;
+    require ArrayBuffer;
+    require DataView;
+    require ReadableStream;
+    require Promised::Command::Signals;
+    Promised::Command::Signals->load_modules;
+  } # load_modules
+  
   sub new ($$) {
     my $self = bless {args => []}, $_[0];
     ($self->{command}, @{$self->{args}}) = @{$_[1]};
@@ -23602,6 +23618,116 @@ $fatpacked{"Promised/Command.pm"} = '#line '.(1+__LINE__).' "'.__FILE__."\"\n".<
   
   =cut
 PROMISED_COMMAND
+
+$fatpacked{"Promised/Command/Signals.pm"} = '#line '.(1+__LINE__).' "'.__FILE__."\"\n".<<'PROMISED_COMMAND_SIGNALS';
+  package Promised::Command::Signals;
+  use strict;
+  use warnings;
+  our $VERSION = '1.0';
+  use AnyEvent;
+  use Promise;
+  
+  my $Sig = {};
+  my $Handlers = {};
+  
+  our $Action = {
+    HUP => 'die',
+    INT => 'die',
+    QUIT => 'die',
+    TERM => 'die',
+  };
+  
+  my $DEBUG = $ENV{PROMISED_COMMAND_DEBUG};
+  
+  sub load_modules () {
+    require Carp;
+    require AbortController;
+  }
+  
+  sub add_handler ($$$;%) {
+    my (undef, $signal, $code, %args) = @_;
+    return if $Handlers->{$signal}->{$code};
+    my $name = '';
+    if ($DEBUG) {
+      if (defined $args{name}) {
+        $name = '' . $args{name};
+      } else {
+        require Carp;
+        $name = $code . Carp::shortmess ();
+      }
+    }
+    unless (keys %{$Handlers->{$signal} or {}}) {
+      $Sig->{$signal} = AE::signal $signal => sub {
+        my $canceled;
+        my $cancel = sub { $canceled = 1 };
+        AE::log alert => "SIG$signal received";
+        Promise->all ([
+          map {
+            my ($code, $name) = @$_;
+            AE::log alert => qq{Running signal handler "$name"...} if $DEBUG;
+            Promise->resolve ($cancel)->then ($code)->finally (sub {
+              AE::log alert => qq{Signal handler "$name" done} if $DEBUG;
+            })->catch (sub {
+              AE::log alert => qq{Died within signal handler "$name": $_[0]};
+            });
+          } values %{$Handlers->{$signal} or {}},
+        ])->then (sub {
+          return if $canceled;
+          my $action = $Action->{$signal} || 'die';
+          unless ($action eq 'ignore') {
+            AE::log alert => "terminated by SIG$signal";
+            exit 1;
+          }
+        });
+      };
+      AE::log alert => "Promised::Command::Signals handler for SIG$signal installed" if $DEBUG;
+    }
+    $Handlers->{$signal}->{$code} = [$code, $name];
+    AE::log alert => qq{A SIG$signal handler "$name" added} if $DEBUG;
+    return bless [$signal, $code], 'Promised::Command::Signals::Handler';
+  } # add_handler
+  
+  sub _remove_handler ($$$) {
+    my (undef, $signal, $code) = @_;
+    delete $Handlers->{$signal}->{$code};
+    delete $Sig->{$signal} unless keys %{$Handlers->{$signal}};
+  } # _remove_handler
+  
+  my $GlobalAbortControllers = [];
+  
+  sub abort_signal ($) {
+    my $class = shift;
+    require AbortController;
+    my $ac = AbortController->new;
+    my $v = {ac => $ac, sigs => {}};
+    push @$GlobalAbortControllers, $v;
+    $v->{sigs}->{$_} = $class->add_handler ($_ => sub {
+      $_[0]->(); # cancel signal
+      $ac->abort;
+      $GlobalAbortControllers = [grep {
+        $_->{ac} ne $ac;
+      } @$GlobalAbortControllers];
+    }) for qw(INT QUIT TERM);
+    return $ac->signal;
+  } # abort_signal
+  
+  package Promised::Command::Signals::Handler;
+  
+  sub DESTROY ($) {
+    Promised::Command::Signals->_remove_handler (@{$_[0]});
+  } # DESTROY
+  
+  1;
+  
+  =head1 LICENSE
+  
+  Copyright 2015-2022 Wakaba <wakaba@suikawiki.org>.
+  
+  This library is free software; you can redistribute it and/or modify
+  it under the same terms as Perl itself.
+  
+  =cut
+PROMISED_COMMAND_SIGNALS
 
 $fatpacked{"Promised/File.pm"} = '#line '.(1+__LINE__).' "'.__FILE__."\"\n".<<'PROMISED_FILE';
   package Promised::File;
