@@ -35,6 +35,7 @@
     formvalidator: {type: 'handler'},
     filltype: {type: 'map'},
     templateSet: {type: 'element'},
+    labelSet: {type: 'element'},
     element: {type: 'customElement'},
   };
   var defs = {};
@@ -191,18 +192,26 @@
     } : upgradedElementProps[def.name][def.is || null].pcInit || function () { };
     upgrader[def.name][def.is || null] = function () {
       var e = this;
-      if (e.nextSibling ||
-          document.readyState === 'interactive' ||
+      var lc = undefined;
+      if (document.readyState === 'interactive' ||
           document.readyState === 'complete') {
         return init.call (e);
+      } else if (e.nextSibling) {
+        lc = e.lastChild;
       }
       return new Promise (function (ok) {
         var timer = setInterval (function () {
-          if (e.nextSibling ||
-              document.readyState === 'interactive' ||
+          if (document.readyState === 'interactive' ||
               document.readyState === 'complete') {
             ok ();
             clearInterval (timer);
+          } else if (e.nextSibling) {
+            if (lc === e.lastChild) { // unchanged
+              ok ();
+              clearInterval (timer);
+            } else {
+              lc = e.lastChild;
+            }
           }
         }, 100);
       }).then (function () {
@@ -421,7 +430,9 @@
       }
       var e = document.createElement (localName);
       e.appendChild (template.content.cloneNode (true));
-      ['class', 'title', 'id'].forEach (_ => {
+      var attrs = (template.getAttribute ('data-filled') || '').split (/\s+/);
+      attrs.push ('class', 'title', 'id');
+      attrs.forEach (_ => {
         if (template.hasAttribute (_)) {
           e.setAttribute (_, template.getAttribute (_));
         }
@@ -601,14 +612,18 @@
   }; // end
 
   commonMethods.pcActionStatus = function () {
-    var elements = this.querySelectorAll ('action-status');
+    return exportable.$paco.actionStatus (this);
+  }; // pcActionStatus
+
+  exportable.$paco.actionStatus = function (c) {
+    var elements = c.querySelectorAll ('action-status');
     elements.forEach (function (e) {
       if (e.hasChildNodes ()) return;
       e.hidden = true;
       e.innerHTML = '<action-status-message></action-status-message> <progress></progress>';
     });
     return new ActionStatus (elements);
-  }; // pcActionStatus
+  }; // $paco.actionStatus
 
   defineElement ({
     name: 'template-set',
@@ -629,6 +644,26 @@
     return templates[""];
   }; // empty
 
+  // XXX experimental undocumented feature
+  defineElement ({
+    name: 'label-set',
+    props: {
+      pcInit: function () {
+        var name = this.getAttribute ('name');
+        if (!name) {
+          throw new Error
+          ('|label-set| element does not have |name| attribute');
+        }
+        addElementDef ('labelSet', name, this);
+      }, // pcInit
+      getLabel: function (key) {
+        var cs = getComputedStyle (this);
+        var label = parseCSSString (cs.getPropertyValue ('--label-' + key), key);
+        return label;
+      }, // getLabel
+    },
+  }); // <label-set>
+
   defs.filltype["enum-value"] = 'contentattribute';
   defineElement ({
     name: 'enum-value',
@@ -644,11 +679,19 @@
           this.hidden = true;
         } else {
           this.hidden = false;
-          var label = this.getAttribute ('label-' + value);
-          if (label === null) {
-            this.textContent = value;
+          var ls = this.getAttribute ('labelset');
+          if (ls) {
+            this.textContent = '';
+            return getDef ('labelSet', ls).then (ls => {
+              this.textContent = ls.getLabel (value);
+            });
           } else {
-            this.textContent = label;
+            var label = this.getAttribute ('label-' + value);
+            if (label === null) {
+              this.textContent = value;
+            } else {
+              this.textContent = label;
+            }
           }
         }
       }, // evRender
@@ -728,9 +771,9 @@
     var t = (cssText || 'auto');
 
     // XXX
-    t = t.replace (/\\(00[89A-Fa-f][0-9A-Fa-f]|[1-9A-Fa-f][0-9A-Fa-f]{3}|[1-9A-Fa-f][0-9A-Fa-f]{4})/g,
+    t = t.replace (/\\(00[0189A-Fa-f][0-9A-Fa-f]|[1-9A-Fa-f][0-9A-Fa-f]{3}|[1-9A-Fa-f][0-9A-Fa-f]{4}|a\s?)/g,
                    (__, _) => String.fromCodePoint (parseInt (_, 16)));
-    
+
     var m = t.match (/^\s*"([^"\\]*)"\s*$/); // XXX escape
     if (m) {
       return m[1];
@@ -990,6 +1033,33 @@
           }
         }
 
+        var mc = this.getAttribute ('menucontainer');
+        if (mc) {
+          var menuContainer = this;
+          while (menuContainer && !menuContainer.matches (mc)) {
+            menuContainer = menuContainer.parentElement;
+          }
+          if (menuContainer) {
+            var bop = button;
+            var l = 0;
+            var t = 0;
+            while (bop && bop !== menuContainer) {
+              l += bop.offsetLeft;
+              t += bop.offsetTop;
+              bop = bop.offsetParent;
+            }
+            menu.style.setProperty ('--paco-menu-button-left', l + 'px');
+            menu.style.setProperty ('--paco-menu-button-right', l + button.offsetWidth + 'px');
+            menu.style.setProperty ('--paco-menu-button-top', t + 'px');
+            menu.style.setProperty ('--paco-menu-button-bottom', t + button.offsetHeight + 'px');
+            
+            menu.style.setProperty ('--paco-avail-height', menuContainer.offsetHeight + 'px');
+            menu.style.setProperty ('--paco-avail-width', menuContainer.offsetWidth + 'px');
+          } else {
+            console.log ("Element |"+mc+"| not found");
+          }
+        }
+
         var ev = new Event ('toggle', {bubbles: true});
         this.dispatchEvent (ev);
       }, // pmLayout
@@ -1021,16 +1091,35 @@
           });
         }
       }, // pcInit
-      tsInit: function (opts) {
-        var tabMenu = null;
+      pcTabElements: function () {
         var tabSections = [];
+        var tabMenu = null;
         Array.prototype.forEach.call (this.children, function (f) {
           if (f.localName === 'section') {
             tabSections.push (f);
           } else if (f.localName === 'tab-menu') {
-            tabMenu = f;
+            tabMenu = tabMenu || f;
           }
         });
+        var tabMenuContainer = tabMenu;
+        var tms = this.getAttribute ('menu-selector');
+        if (tms) {
+          var e = document.querySelector (tms);
+          if (e) {
+            if (e.localName === 'tab-menu') {
+              tabMenu = tabMenuContainer = e;
+            } else {
+              tabMenuContainer = e;
+              tabMenu = e.querySelector ('tab-menu'); // or null
+            }
+          } else {
+            tabMenu = tabMenuContainer = null;
+          }
+        }
+        return {tabMenu, tabMenuContainer, tabSections};
+      }, // pcTabElements
+      tsInit: function (opts) {
+        var {tabMenu, tabSections} = this.pcTabElements ();
       
         if (!tabMenu) return;
 
@@ -1070,12 +1159,7 @@
       }, // tsInit
       tsShowTabByURL: function (opts) {
         if (opts.initiator === this) return;
-        var tabSections = [];
-        Array.prototype.forEach.call (this.children, function (f) {
-          if (f.localName === 'section') {
-            tabSections.push (f);
-          }
-        });
+        var {tabMenu, tabSections} = this.pcTabElements ();
         var currentURL = location.href;
         var currentPageURL = currentURL.replace (/#.+$/, '');
         var initial = null;
@@ -1132,18 +1216,14 @@
         if (initial) this.tsShowTab (initial, {initiatorType: opts.initiatorType});
       }, // tsShowTabByURL
       tsShowTab: function (f, opts) {
-        var tabMenu = null;
-        var tabSections = [];
-        Array.prototype.forEach.call (this.children, function (f) {
-          if (f.localName === 'section') {
-            tabSections.push (f);
-          } else if (f.localName === 'tab-menu') {
-            tabMenu = f;
-          }
-        });
+        var {tabMenu, tabMenuContainer, tabSections} = this.pcTabElements ();
 
         tabMenu.querySelectorAll ('a').forEach ((g) => {
           g.classList.toggle ('active', g.tsSection === f);
+        });
+        tabMenuContainer.querySelectorAll ('tab-menu-active').forEach (_ => {
+          var header = f.querySelector ('h1');
+          _.textContent = header ? header.textContent : '§';
         });
         tabSections.forEach ((g) => {
           g.classList.toggle ('active', f === g);
@@ -1159,7 +1239,9 @@
             if (x.hash && y.hash === '') y += x.hash;
             
             if (x.href !== y.href) {
-              history.replaceState (null, null, y);
+              if (opts.initiatorType !== 'url') {
+                history.replaceState (null, null, y);
+              }
               var evc = new Event ('pcLocationChange', {bubbles: true});
               evc.pcInitiator = this;
               Promise.resolve ().then (() => window.dispatchEvent (evc));
@@ -1306,7 +1388,10 @@
     }
     return fetch (url, {
       credentials: "same-origin",
-    }).then ((res) => res.json ()).then ((json) => {
+    }).then ((res) => {
+      if (res.status !== 200) throw res;
+      return res.json ();
+    }).then ((json) => {
       if (!this.hasAttribute ('key')) throw new Error ("|key| is not specified");
       json = json || {};
       return {
@@ -1429,7 +1514,8 @@
           return 'tbody';
         } else if (type === 'tab-set') {
           return 'tab-set';
-        } else if (type === 'ul' || type === 'ol') {
+        } else if (type === 'ul' || type === 'ol' ||
+                   type === 'select' || type === 'datalist') {
           return type;
         } else {
           return 'list-main';
@@ -1590,6 +1676,8 @@
           'tab-set': 'section',
           ul: 'li',
           ol: 'li',
+          select: 'option',
+          datalist: 'option',
         }[listContainer.localName] || 'list-item';
       return Promise.resolve ().then (() => {
         if (changes.changed) {
@@ -1809,6 +1897,15 @@
     var e = this.querySelector (args.args[1]);
     this.pcSendFocus (e);
   }; // focus
+
+  defs.formsaved.fill = function (args) {
+    return args.json ().then ((json) => {
+      var e = this.querySelector (args.args[1]);
+      if (!e) throw new Error ('Element |'+args.args[1]+'| not found');
+      $fill (e, json);
+      e.hidden = false;
+    });
+  }; // fill
 
   defineElement ({
     name: 'before-unload-check',
