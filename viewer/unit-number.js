@@ -26,7 +26,9 @@
     var separator = '';
     if (type === 'distance') {
       unit = 'm';
-      if (useIUnits) {
+      var iu = useIUnits;
+      if (e.hasAttribute ('altunit')) iu = !iu;
+      if (iu) {
         if (value >= 10 * fpml * mpf || value <= -10 * fpml * mpf) {
           value = value / mpf / fpml;
           unit = 'ml';
@@ -49,7 +51,9 @@
       }
     } else if (type === 'elevation') {
       unit = 'm';
-      if (useIUnits) {
+      var iu = useIUnits;
+      if (e.hasAttribute ('altunit')) iu = !iu;
+      if (iu) {
         value = value / mpf;
         unit = 'ft';
       }
@@ -168,7 +172,7 @@
 
 /*
 
-Copyright 2017-2021 Wakaba <wakaba@suikawiki.org>.
+Copyright 2017-2023 Wakaba <wakaba@suikawiki.org>.
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as
