@@ -46,7 +46,7 @@ sub run (%) {
 
   my $temps = [];
   my $get_temp_path = sub {
-    my $temp = File::Temp->newdir;
+    my $temp = File::Temp->newdir (CLEANUP => !$ENV{TEST_NO_CLEANUP});
     push @$temps, $temp;
     return path ($temp);
   };
@@ -202,7 +202,7 @@ sub Test (&;%) {
 
 =head1 LICENSE
 
-Copyright 2018-2022 Wakaba <wakaba@suikawiki.org>.
+Copyright 2018-2024 Wakaba <wakaba@suikawiki.org>.
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself.
