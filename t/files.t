@@ -397,8 +397,8 @@ Test {
     my $return = $_[0];
     test {
       my $json = $return->{json};
-      is $json->{rule}->{base_dir}, $return->{base_path}->absolute->stringify;
-      is $json->{rule}->{result_dir}, $return->{artifact_path}->absolute->stringify;
+      is $json->{rule}->{base_dir}, $return->{base_path}->realpath->stringify;
+      is $json->{rule}->{result_dir}, $return->{artifact_path}->realpath->stringify;
       is $json->{file_results}->{'t/abc.t'}->{output_file},
           'files/t_2Fabc_2Et.txt';
       is $json->{file_results}->{'t/def.t'}->{output_file},
@@ -445,7 +445,7 @@ run_tests;
 
 =head1 LICENSE
 
-Copyright 2018-2022 Wakaba <wakaba@suikawiki.org>.
+Copyright 2018-2024 Wakaba <wakaba@suikawiki.org>.
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself.
