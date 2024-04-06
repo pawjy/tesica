@@ -36,7 +36,7 @@ Test {
         is $x->{2}->[-1], -1;
       }
       is 0+@{$json->{executors}->{perl}->{perl_command}}, 1;
-      is $json->{executors}->{perl}->{perl_command}->[0], '' . $return->{base_path}->child ('perl')->absolute;
+      is $json->{executors}->{perl}->{perl_command}->[0], '' . $return->{base_path}->child ('perl')->realpath;
     } $c;
   });
 } n => 8, name => ['perl'];
@@ -45,7 +45,7 @@ run_tests;
 
 =head1 LICENSE
 
-Copyright 2018-2022 Wakaba <wakaba@suikawiki.org>.
+Copyright 2018-2024 Wakaba <wakaba@suikawiki.org>.
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself.

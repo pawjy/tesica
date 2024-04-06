@@ -50,6 +50,7 @@ Test {
       ok $json->{file_results}->{'t/abc2.t'}->{result}->{ok};
       {
         my $f = $return->{result_file_bytes}->('t/abc2.t');
+        warn "Result file: |$f|\n"; # for debugging
         my $s = {1 => '', 2 => '', 70001 => '', 70002 => ''};
         while ($f =~ s{^\x0A&([0-9]+) (-?[0-9]+) ([0-9]+\.[0-9]+)\x0A}{}) {
           if ($2 >= 0) {
@@ -71,7 +72,7 @@ run_tests;
 
 =head1 LICENSE
 
-Copyright 2022 Wakaba <wakaba@suikawiki.org>.
+Copyright 2022-2024 Wakaba <wakaba@suikawiki.org>.
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself.

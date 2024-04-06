@@ -15,8 +15,8 @@ Test {
     test {
       my $json = $return->{json};
       is $return->{result}->exit_code, $json->{result}->{exit_code};
-      is $json->{rule}->{base_dir}, $return->{base_path}->absolute->stringify;
-      is $json->{rule}->{result_dir}, $return->{base_path}->child ('local/test')->absolute->stringify;
+      is $json->{rule}->{base_dir}, $return->{base_path}->realpath->stringify;
+      is $json->{rule}->{result_dir}, $return->{base_path}->child ('local/test')->realpath->stringify;
       is $json->{rule}->{manifest_file}, undef;
       is $json->{result}->{exit_code}, 0;
       is $json->{result}->{json_file}, 'result.json';
@@ -117,7 +117,7 @@ run_tests;
 
 =head1 LICENSE
 
-Copyright 2018-2022 Wakaba <wakaba@suikawiki.org>.
+Copyright 2018-2024 Wakaba <wakaba@suikawiki.org>.
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself.

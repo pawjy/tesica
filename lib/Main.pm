@@ -236,14 +236,15 @@ sub start_log_watching ($$) {
       $ee->{channel} = ++$channel;
       $result->{rule}->{entangled_logs}->{$ee->{channel}} = $el;
 
-      $ee->{cmd} = Promised::Command->new (['tail', '-f', '--retry', '-n', 0, $path]);
+      $ee->{cmd} = Promised::Command->new (['tail', '-n', 0, '-F', $path]);
       $ee->{cmd}->propagate_signal (1);
       my $rs = $ee->{cmd}->get_stdout_stream;
       my $r = $rs->get_reader ('byob');
       $ee->{cmd}->stderr (\my $stderr);
       push @wait, my $run = $ee->{cmd}->run;
       my $ac = AbortController->new;
-      $ee->{cmd}->wait->catch (sub { $ac->abort });
+      my $wait = $ee->{cmd}->wait;
+      $wait->catch (sub { $ac->abort });
       $ee->{closed} = promised_until {
         return $r->read (DataView->new (ArrayBuffer->new (1024)))->then (sub {
           if ($_[0]->{done}) {
