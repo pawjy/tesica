@@ -24202,6 +24202,8 @@ $fatpacked{"Promised/Command/Signals.pm"} = '#line '.(1+__LINE__).' "'.__FILE__.
     return $ac->signal;
   } # abort_signal
   
+  END { $GlobalAbortControllers = [] }
+  
   package Promised::Command::Signals::Handler;
   
   sub DESTROY ($) {
@@ -24275,9 +24277,9 @@ $fatpacked{"Promised/File.pm"} = '#line '.(1+__LINE__).' "'.__FILE__."\"\n".<<'P
     return Promise->resolve ($self->{stat}) if defined $self->{stat};
     return Promise->new (sub {
       my ($ok, $ng) = @_;
+      require File::stat;
       aio_stat $self->{path}, sub {
         return $ng->("|$self->{path}|: $!") unless @_;
-        require File::stat;
         $ok->($self->{stat} = File::stat::stat (\*_));
       };
     });
@@ -24288,9 +24290,9 @@ $fatpacked{"Promised/File.pm"} = '#line '.(1+__LINE__).' "'.__FILE__."\"\n".<<'P
     return Promise->resolve ($self->{lstat}) if defined $self->{lstat};
     return Promise->new (sub {
       my ($ok, $ng) = @_;
+      require File::stat;
       aio_lstat $self->{path}, sub {
         return $ng->("|$self->{path}|: $!") unless @_;
-        require File::stat;
         $ok->($self->{lstat} = File::stat::stat (\*_));
       };
     });
@@ -24659,7 +24661,7 @@ $fatpacked{"Promised/File.pm"} = '#line '.(1+__LINE__).' "'.__FILE__."\"\n".<<'P
   
   =head1 LICENSE
   
-  Copyright 2015-2020 Wakaba <wakaba@suikawiki.org>.
+  Copyright 2015-2024 Wakaba <wakaba@suikawiki.org>.
   
   This library is free software; you can redistribute it and/or modify
   it under the same terms as Perl itself.
@@ -24717,7 +24719,11 @@ $fatpacked{"Promised/Flow.pm"} = '#line '.(1+__LINE__).' "'.__FILE__."\"\n".<<'P
     my $aborted = sub { };
     if (defined $args{signal}) {
       if ($args{signal}->aborted) {
-        return Promise->reject (Promise::AbortError->new ('Aborted by signal'));
+        if (defined $args{name}) {
+          return Promise->reject (Promise::AbortError->new ("Aborted by signal - $args{name}"));
+        } else {
+          return Promise->reject (Promise::AbortError->new ('Aborted by signal'));
+        }
       } else {
         $args{signal}->manakai_onabort (sub {
           $aborted->();
@@ -24848,21 +24854,31 @@ $fatpacked{"Promised/Flow.pm"} = '#line '.(1+__LINE__).' "'.__FILE__."\"\n".<<'P
     my ($code, %args) = @_;
     $args{interval} ||= 1;
   
+    my $ac1 = AbortController->new;
+    my $ac2 = AbortController->new;
+    if (defined $args{signal}) {
+      $args{signal}->manakai_onabort (sub {
+        $ac1->abort;
+        $ac2->abort;
+      });
+    }
+  
     my $timer;
-    my $ac = AbortController->new;
-    return promised_cleanup {
-      $ac->abort;
-      undef $timer;
-    } promised_timeout {
+    return ((promised_timeout {
       return promised_until {
         return PR->then ($code)->then (sub {
           return 'done' if $_[0];
-          return promised_sleep ($args{interval}, signal => $ac->signal)->then (sub {
+          return promised_sleep ($args{interval}, signal => $ac1->signal, name => $args{name})->then (sub {
             return not 'done';
           });
         });
-      } signal => $args{signal}, name => $args{name};
-    } $args{timeout}, name => $args{name};
+      } signal => $ac2->signal, name => $args{name};
+    } $args{timeout}, name => $args{name})->finally (sub {
+      $ac1->abort;
+      $ac2->abort;
+      $args{signal}->manakai_onabort (undef) if defined $args{signal};
+      undef $timer;
+    }));
   } # promised_wait_until
   
   push @EXPORT, qw(promised_cv);
@@ -24876,7 +24892,7 @@ $fatpacked{"Promised/Flow.pm"} = '#line '.(1+__LINE__).' "'.__FILE__."\"\n".<<'P
   
   =head1 LICENSE
   
-  Copyright 2016-2018 Wakaba <wakaba@suikawiki.org>.
+  Copyright 2016-2022 Wakaba <wakaba@suikawiki.org>.
   
   This library is free software; you can redistribute it and/or modify
   it under the same terms as Perl itself.
@@ -26446,7 +26462,6 @@ $fatpacked{"Streams/Filehandle.pm"} = '#line '.(1+__LINE__).' "'.__FILE__."\"\n"
     return Promise->resolve->then (sub {
       die Streams::TypeError->new ("The argument is not an ArrayBufferView")
           unless UNIVERSAL::isa ($view, 'ArrayBufferView');
-      return if $view->byte_length == 0;
       return _writing {
         return 1 unless defined $$fhref; # end
         my $l = eval { $view->buffer->manakai_syswrite
@@ -26657,7 +26672,7 @@ $fatpacked{"Streams/Filehandle.pm"} = '#line '.(1+__LINE__).' "'.__FILE__."\"\n"
   
   =head1 LICENSE
   
-  Copyright 2016-2018 Wakaba <wakaba@suikawiki.org>.
+  Copyright 2016-2022 Wakaba <wakaba@suikawiki.org>.
   
   This library is free software; you can redistribute it and/or modify
   it under the same terms as Perl itself.

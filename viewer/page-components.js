@@ -681,7 +681,6 @@
           this.hidden = false;
           var ls = this.getAttribute ('labelset');
           if (ls) {
-            this.textContent = '';
             return getDef ('labelSet', ls).then (ls => {
               this.textContent = ls.getLabel (value);
             });
@@ -878,6 +877,41 @@
       }, // pcCopy
     }, // props
   }); // <can-copy>
+
+  exportable.$paco.ondownload = (opts) => {
+    let a = document.createElement ('a');
+    a.href = opts.url;
+    a.download = opts.fileName;
+    (document.body || document.head || document.documentElement).appendChild (a);
+    a.click ();
+    a.remove ();
+  }; // $paco.ondownload
+  exportable.$paco.download = (opts) => {
+    let url;
+    let fileName = opts.fileName;
+    if (opts.url !== undefined) {
+      url = opts.url;
+    } else if (opts.blob !== undefined) {
+      url = URL.createObjectURL (opts.blob);
+      if (!fileName) fileName = opts.blob.name;
+    } else {
+      let text;
+      let mime = opts.mime || '';
+      if (opts.json !== undefined) {
+        text = JSON.stringify (opts.json);
+        if (!mime) mime = 'application/json';
+        if (!fileName) fileName = 'file.json';
+      } else {
+        text = '' + opts.string;
+        if (!fileName) fileName = 'file.txt';
+      }
+      url = 'data:' + encodeURIComponent (mime) + ',' + encodeURIComponent (text);
+    }
+    if (!fileName) fileName = 'file.dat';
+
+    url = '' + new URL (url, location.href);
+    $paco.ondownload ({url, fileName});
+  }; // $paco.download
 
   defineElement ({
     name: 'popup-menu',
@@ -1376,7 +1410,7 @@
   }); // <toast-box>
   
   defs.loader.src = function (opts) {
-    if (!this.hasAttribute ('src')) return {};
+    if (!this.hasAttribute ('src')) return {data: []};
     var url = this.getAttribute ('src');
     if (opts.ref) {
       url += /\?/.test (url) ? '&' : '?';
@@ -1422,6 +1456,8 @@
     pcActionStatus: true,
     props: {
       pcInit: function () {
+        this.pcAC = new AbortController;
+        
         var selector = 'a.list-prev, a.list-next, button.list-prev, button.list-next, ' + this.lcGetListContainerSelector ();
       new MutationObserver ((mutations) => {
         mutations.forEach ((m) => {
@@ -1453,24 +1489,31 @@
         return interval;
       }, // lcGetNextInterval
       load: function (opts) {
+        if (!this.pcAC) return; // not yet initialized
         if (!opts.page || opts.replace) {
           this.lcClearList ();
           this.pcNeedClearListContainer = true;
         }
-        return this.lcLoad (opts).then ((done) => {
+        this.pcAC.abort ();
+        this.pcAC = new AbortController;
+        let as = this.pcAC.signal;
+        return this.pcLoad (opts, as).then ((done) => {
           if (done) {
+            if (as.aborted) return;
             this.lcDataChanges.scroll = opts.scroll;
             return this.lcRequestRender ();
           }
         }).then (() => {
           if (!this.hasAttribute ('autoreload')) return;
+          if (as.aborted) return;
           var interval = this.lcGetNextInterval (opts.arInterval);
           clearTimeout (this.lcAutoReloadTimer);
           this.lcAutoReloadTimer = setTimeout (() => {
             this.load ({arInterval: interval});
           }, interval);
         }, (e) => {
-          if (!this.hasAttribute ('autoreload')) return;
+          if (!this.hasAttribute ('autoreload')) throw e;
+          if (as.aborted) throw e;
           var interval = this.lcGetNextInterval (opts.arInterval);
           clearTimeout (this.lcAutoReloadTimer);
           this.lcAutoReloadTimer = setTimeout (() => {
@@ -1525,7 +1568,7 @@
         return this.querySelector (this.lcGetListContainerSelector ());
       }, // lcGetListContainer
       
-      lcLoad: function (opts) {
+      pcLoad: function (opts, signal) {
         var resolve;
         var reject;
         this.loaded = new Promise ((a, b) => {
@@ -1540,14 +1583,18 @@
           e.hidden = true;
         });
         return getDef ("loader", this.getAttribute ('loader') || 'src').then ((loader) => {
-          return loader.call (this, opts);
+          if (signal.aborted) return;
+          return loader.call (this, {...opts, signal});
         }).then ((result) => {
+          if (signal.aborted) return;
           as.stageEnd ('loader');
           as.stageStart ('filter');
           return getDef ("filter", this.getAttribute ('filter') || 'default').then ((filter) => {
-            return filter.call (this, result);
+            if (signal.aborted) return;
+            return filter.call (this, result, {signal});
           });
         }).then ((result) => {
+          if (signal.aborted) return false;
           var newList = result.data || [];
           var prev = (opts.page === 'prev' ? result.next : result.prev) || {};
           var next = (opts.page === 'prev' ? result.prev : result.next) || {};
@@ -1609,7 +1656,7 @@
           as.end ({error: e});
           return false;
         });
-      }, // lcLoad
+      }, // pcLoad
 
       lcRequestRender: function () {
         clearTimeout (this.lcRenderRequestedTimer);

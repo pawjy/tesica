@@ -1,3 +1,124 @@
+/*
+
+Usage:
+
+Just insert:
+
+  <script src="path/to/time.js" data-time-selector="time" async></script>
+
+... where the |data-time-selector| attribute value is a selector that
+only matches with |time| elements that should be processed.  Then any
+|time| element matched with the selector when the script is executed,
+as well as any |time| element matched with the selector inserted after
+the script's execution, is processed appropriately.  E.g.:
+
+  <time>2008-12-20T23:27+09:00</time>
+  <time data-format=datetime>2008-12-20T23:27+09:00</time>
+  <!-- Will be rendered as a date and time, e.g.
+       "20 December 2008 11:27:00 PM" -->
+
+  <time>2008-12-20</time>
+  <time data-format=date>2008-12-20T23:27+09:00</time>
+  <!-- Will be rendered as a date, e.g. "20 December 2008" -->
+
+  <time data-format=monthday>2008-12-20</time>
+  <time data-format=monthday>2008-12-20T23:27+09:00</time>
+  <!-- Will be rendered as a date, e.g. "20 December 2008" but the
+       year component is omitted if it is same as this year, e.g.
+       "December 20" if it's 2008. -->
+
+  <time data-format=monthdayhm>2008-12-20T23:27+09:00</time>
+  <!-- Will be rendered as a date, hour, and minute, e.g.
+       "20 December 2008 11:27 PM" but the year component is omitted
+       if it is same as this year, e.g. "December 20 11:27 PM" if
+       it's 2008. -->
+
+  <time data-format=monthdaytime>2008-12-20T23:27+09:00</time>
+  <!-- Will be rendered as a date and time, e.g.
+       "20 December 2008 11:27:00 PM" but the year component is omitted
+       if it is same as this year, e.g. "December 20 11:27:00 PM" if
+       it's 2008. -->
+
+  <time data-format=ambtime>2008-12-20T23:27+09:00</time>
+  <!-- Will be rendered as an "ambtime" in English or Japanese
+       depending on the user's language preference, such as "2 hours
+       ago", if the date is within 100 days from "today" -->
+
+  <time data-format=deltatime>2008-12-20T23:27+09:00</time>
+  <!-- Will be rendered as an "ambtime" in English or Japanese
+       depending on the user's language preference, such as "2 hours
+       ago" -->
+
+  <time data-format=time>2008-12-20T23:27+09:00</time>
+  <!-- Will be rendered as a time, e.g. "11:27:00 PM" -->
+
+Attributes.
+
+  datetime=""
+
+    The machine readable date and/or time string, as specified by the
+    HTML Standard.  Can be omitted if the text content of the element
+    is a machine readable date and/or time string.
+
+  data-format=""
+
+    The format of the date/time text.  See the examples above.
+
+  data-reftime=""
+
+    The reference time used to create the date/time text
+    (e.g. |data-format=ambtime| or |data-format=monthday|).  The value
+    must be a global date and time string as specified by the HTML
+    Standard.  Defaulted to the current time.
+
+  data-tzoffset=""
+
+    The time-zone offset used to create the date/time text.  The value
+    must be a positive, zero, or negative integer in seconds,
+    representing the time difference from the UTC (positive for
+    eastern hemisphere).  Defaulted to the platform's time-zone
+    offset.
+
+When the |time| element's |datetime| or |data-tzoffset| attribute
+value is changed, the element's content is updated appropriately.
+(Note that the element's content's mutation is ignored.)
+
+The '--timejs-serialization' CSS property can be used to specify the
+date and time serialization format.  This version supports following
+serializations:
+
+  Property value     Output example
+  -----------------  ----------------------------------
+  'auto' (default)   (platform dependent)
+  'dtsjp1'           令和元(2019)年9月28日 1時23分45秒
+  'dtsjp2'           R1(2019).9.28 1:23:45
+  'dtsjp3'           2019(R1)/9/28 1:23:45
+
+For backward compatibility with previous versions of this script, if
+there is no |data-time-selector| or |data-selector| attribute, the
+script does nothing by default, except for defining the |TER| global
+property.  By invoking |new TER (/element/)| or |new TER.Delta
+(/element/)| constructor, where /element/ is an element node, any
+|time| element in the /element/ subtree (or /element/ itself if it is
+a |time| element) is processed appropriately.  The |TER| constructor
+is equivalent to no |data-format| attribute and the |TER.Delta|
+constructor is equivalent to |data-format=ambtime|.
+
+Repository:
+
+Latest version of this script is available in Git repository
+<https://github.com/wakaba/timejs>.
+
+Specification:
+
+HTML Standard <https://html.spec.whatwg.org/#the-time-element>.
+
+This script interprets "global date and time string" using older
+parsing rules as defined in previous versions of the HTML spec, which
+is a willful violation to the current HTML Living Standard.
+
+*/
+
 function TER (c) {
   this.container = c;
   this._initialize ();
@@ -75,6 +196,15 @@ function TER (c) {
       return new Date (NaN);
     }
   } // parseTimeElement
+
+  function _getNow (el) {
+    let ref = el.getAttribute ('data-reftime');
+    if (ref !== null) {
+      return parseTimeElement ({getAttribute: () => ref}); // or invalid date
+    } else {
+      return new Date;
+    }
+  } // _getNow
 
   function _2digit (i) {
     return i < 10 ? '0' + i : i;
@@ -155,6 +285,25 @@ function TER (c) {
     }
   } // _setMonthDayDateContent
 
+  function _setMonthDayHMContent (el, date) {
+    var dts = getComputedStyle (el).getPropertyValue ('--timejs-serialization');
+    dts = dts.replace (/^\s+/, '').replace (/\s+$/, '');
+    if (dts === 'dtsjp1') {
+      el.textContent = (date.getMonth () + 1) + '月' + date.getDate () + '日(' + ['日','月','火','水','木','金','土'][date.getDay ()] + ') ' + date.getHours () + '時' + date.getMinutes () + '分';
+    } else if (dts === 'dtsjp2') {
+      el.textContent = (date.getMonth () + 1) + '.' + date.getDate () + ' ' + date.getHours () + ':' + _2digit (date.getMinutes ());
+    } else if (dts === 'dtsjp3') {
+      el.textContent = (date.getMonth () + 1) + '/' + date.getDate () + ' ' + date.getHours () + ':' + _2digit (date.getMinutes ());
+    } else {
+      el.textContent = date.toLocaleString (navigator.language, {
+        month: "numeric",
+        day: "numeric",
+        hour: "numeric",
+        minute: "numeric",
+      });
+    }
+  } // _setMonthDayHMContent
+
   function _setMonthDayTimeContent (el, date) {
     var dts = getComputedStyle (el).getPropertyValue ('--timejs-serialization');
     dts = dts.replace (/^\s+/, '').replace (/\s+$/, '');
@@ -174,6 +323,79 @@ function TER (c) {
       });
     }
   } // _setMonthDayTimeContent
+
+  function setTimeContent (el, date) {
+    if (!el.getAttribute ('title')) {
+      el.setAttribute ('title', el.textContent);
+    }
+    if (!el.getAttribute ('datetime')) {
+      // XXX If year is outside of 1000-9999, ...
+      el.setAttribute ('datetime', date.toISOString ());
+    }
+
+    var tzoffset = el.getAttribute ('data-tzoffset');
+    var usedDate = date;
+    if (tzoffset !== null) {
+      tzoffset = parseFloat (tzoffset);
+      usedDate = new Date (date.valueOf () + date.getTimezoneOffset () * 60 * 1000 + tzoffset * 1000);
+    }
+
+    _setTimeContent (el, usedDate);
+  } // setTimeContent
+
+  function setHMContent (el, date) {
+    if (!el.getAttribute ('title')) {
+      el.setAttribute ('title', el.textContent);
+    }
+    if (!el.getAttribute ('datetime')) {
+      // XXX If year is outside of 1000-9999, ...
+      el.setAttribute ('datetime', date.toISOString ());
+    }
+
+    var tzoffset = el.getAttribute ('data-tzoffset');
+    var usedDate = date;
+    if (tzoffset !== null) {
+      tzoffset = parseFloat (tzoffset);
+      usedDate = new Date (date.valueOf () + date.getTimezoneOffset () * 60 * 1000 + tzoffset * 1000);
+    }
+
+    _setHMContent (el, usedDate);
+  } // setHMContent
+
+  function _setTimeContent (el, date) {
+    var dts = getComputedStyle (el).getPropertyValue ('--timejs-serialization');
+    dts = dts.replace (/^\s+/, '').replace (/\s+$/, '');
+    if (dts === 'dtsjp1') {
+      el.textContent = date.getHours () + '時' + date.getMinutes () + '分' + date.getSeconds () + '秒';
+    } else if (dts === 'dtsjp2') {
+      el.textContent = date.getHours () + ':' + _2digit (date.getMinutes ()) + ':' + _2digit (date.getSeconds ());
+    } else if (dts === 'dtsjp3') {
+      el.textContent = date.getHours () + ':' + _2digit (date.getMinutes ()) + ':' + _2digit (date.getSeconds ());
+    } else {
+      el.textContent = date.toLocaleString (navigator.language, {
+        hour: "numeric",
+        minute: "numeric",
+        second: "numeric",
+      });
+    }
+  } // _setTimeContent
+
+  function _setHMContent (el, date) {
+    var dts = getComputedStyle (el).getPropertyValue ('--timejs-serialization');
+    dts = dts.replace (/^\s+/, '').replace (/\s+$/, '');
+    if (dts === 'dtsjp1') {
+      el.textContent = date.getHours () + '時' + date.getMinutes () + '分';
+    } else if (dts === 'dtsjp2') {
+      el.textContent = date.getHours () + ':' + _2digit (date.getMinutes ());
+    } else if (dts === 'dtsjp3') {
+      el.textContent = date.getHours () + ':' + _2digit (date.getMinutes ());
+    } else {
+      el.textContent = date.toLocaleString (navigator.language, {
+        hour: "numeric",
+        minute: "numeric",
+      });
+    }
+  } // _setHMContent
 
   function _setDateTimeContent (el, date) {
     var dts = getComputedStyle (el).getPropertyValue ('--timejs-serialization');
@@ -195,6 +417,26 @@ function TER (c) {
       });
     }
   } // _setDateTimeContent
+
+  function _setDateHMContent (el, date) {
+    var dts = getComputedStyle (el).getPropertyValue ('--timejs-serialization');
+    dts = dts.replace (/^\s+/, '').replace (/\s+$/, '');
+    if (dts === 'dtsjp1') {
+      el.textContent = _year (date.valueOf () - date.getTimezoneOffset () * 60 * 1000, date.getFullYear (), dts) + '年' + (date.getMonth () + 1) + '月' + date.getDate () + '日(' + ['日','月','火','水','木','金','土'][date.getDay ()] + ') ' + date.getHours () + '時' + date.getMinutes () + '分';
+    } else if (dts === 'dtsjp2') {
+      el.textContent = _year (date.valueOf () - date.getTimezoneOffset () * 60 * 1000, date.getFullYear (), dts) + '.' + (date.getMonth () + 1) + '.' + date.getDate () + ' ' + date.getHours () + ':' + _2digit (date.getMinutes ());
+    } else if (dts === 'dtsjp3') {
+      el.textContent = _year (date.valueOf () - date.getTimezoneOffset () * 60 * 1000, date.getFullYear (), dts) + '/' + (date.getMonth () + 1) + '/' + date.getDate () + ' ' + date.getHours () + ':' + _2digit (date.getMinutes ());
+    } else {
+      el.textContent = date.toLocaleString (navigator.language, {
+        year: "numeric",
+        month: "numeric",
+        day: "numeric",
+        hour: "numeric",
+        minute: "numeric",
+      });
+    }
+  } // _setDateHMContent
   
   function setDateContent (el, date) {
     if (!el.getAttribute ('title')) {
@@ -223,13 +465,38 @@ function TER (c) {
     }
 
     var lang = navigator.language;
-    if (new Date ().toLocaleString (lang, {timeZone: 'UTC', year: "numeric"}) ===
+    if (_getNow (el).toLocaleString (lang, {timeZone: 'UTC', year: "numeric"}) ===
         date.toLocaleString (lang, {timeZone: 'UTC', year: "numeric"})) {
       _setMonthDayDateContent (el, date);
     } else {
       _setDateContent (el, date);
     }
   } // setMonthDayDateContent
+
+  function setMonthDayHMContent (el, date) {
+    if (!el.getAttribute ('title')) {
+      el.setAttribute ('title', el.textContent);
+    }
+    if (!el.getAttribute ('datetime')) {
+      // XXX If year is outside of 1000-9999, ...
+      el.setAttribute ('datetime', date.toISOString ());
+    }
+
+    var tzoffset = el.getAttribute ('data-tzoffset');
+    var usedDate = date;
+    if (tzoffset !== null) {
+      tzoffset = parseFloat (tzoffset);
+      usedDate = new Date (date.valueOf () + date.getTimezoneOffset () * 60 * 1000 + tzoffset * 1000);
+    }
+    
+    var lang = navigator.language;
+    if (_getNow (el).toLocaleString (lang, {timeZone: 'UTC', year: "numeric"}) ===
+        usedDate.toLocaleString (lang, {timeZone: 'UTC', year: "numeric"})) {
+      _setMonthDayHMContent (el, usedDate);
+    } else {
+      _setDateHMContent (el, usedDate);
+    }
+  } // setMonthDayHMContent
 
   function setMonthDayTimeContent (el, date) {
     if (!el.getAttribute ('title')) {
@@ -248,13 +515,31 @@ function TER (c) {
     }
     
     var lang = navigator.language;
-    if (new Date ().toLocaleString (lang, {timeZone: 'UTC', year: "numeric"}) ===
+    if (_getNow (el).toLocaleString (lang, {timeZone: 'UTC', year: "numeric"}) ===
         usedDate.toLocaleString (lang, {timeZone: 'UTC', year: "numeric"})) {
       _setMonthDayTimeContent (el, usedDate);
     } else {
       _setDateTimeContent (el, usedDate);
     }
   } // setMonthDayTimeContent
+
+  function setDateHMContent (el, date) {
+    if (!el.getAttribute ('title')) {
+      el.setAttribute ('title', el.textContent);
+    }
+    if (!el.getAttribute ('datetime')) {
+      // XXX If year is outside of 1000-9999, ...
+      el.setAttribute ('datetime', date.toISOString ());
+    }
+
+    var tzoffset = el.getAttribute ('data-tzoffset');
+    var usedDate = date;
+    if (tzoffset !== null) {
+      tzoffset = parseFloat (tzoffset);
+      usedDate = new Date (date.valueOf () + date.getTimezoneOffset () * 60 * 1000 + tzoffset * 1000);
+    }
+    _setDateHMContent (el, usedDate);
+  } // setDateHMContent
 
   function setDateTimeContent (el, date) {
     if (!el.getAttribute ('title')) {
@@ -285,7 +570,7 @@ function TER (c) {
 
     var text = TER.Delta.prototype.text;
     var dateValue = date.valueOf ();
-    var nowValue = new Date ().valueOf ();
+    var nowValue = _getNow (el).valueOf ();
 
     var diff = dateValue - nowValue;
     if (diff < 0) diff = -diff;
@@ -321,7 +606,11 @@ function TER (c) {
             f -= diff * 24;
             if (f > 0) v += text.sep () + text.hour (f);
           } else {
-            return setDateTimeContent (el, date);
+            if (opts.format === 'ambdate') {
+              return setDateContent (el, date);
+            } else {
+              return setDateTimeContent (el, date);
+            }
           }
         }
       }
@@ -396,14 +685,22 @@ TER.prototype._initialize = function () {
         setDateTimeContent (el, date);
       } else if (format === 'date') {
         setDateContent (el, date);
+      } else if (format === 'datehm') {
+        setDateHMContent (el, date);
       } else if (format === 'monthday') {
         setMonthDayDateContent (el, date);
+      } else if (format === 'monthdayhm') {
+        setMonthDayHMContent (el, date);
       } else if (format === 'monthdaytime') {
         setMonthDayTimeContent (el, date);
-      } else if (format === 'ambtime') {
-        setAmbtimeContent (el, date, {});
+      } else if (format === 'ambtime' || format === 'ambdate') {
+        setAmbtimeContent (el, date, {format});
       } else if (format === 'deltatime') {
         setAmbtimeContent (el, date, {deltaOnly: true});
+      } else if (format === 'time') {
+        setTimeContent (el, date);
+      } else if (format === 'hm') {
+        setHMContent (el, date);
       } else { // auto
         if (date.hasTimezone) { /* full date */
           setDateTimeContent (el, date);
@@ -511,93 +808,10 @@ if (window.TEROnLoad) {
   TEROnLoad ();
 }
 
-/*
-
-Usage:
-
-Just insert:
-
-  <script src="path/to/time.js" data-time-selector="time" async></script>
-
-... where the |data-time-selector| attribute value is a selector that
-only matches with |time| elements that should be processed.  Then any
-|time| element matched with the selector when the script is executed,
-as well as any |time| element matched with the selector inserted after
-the script's execution, is processed appropriately.  E.g.:
-
-  <time>2008-12-20T23:27+09:00</time>
-  <!-- Will be rendered as a date and time, e.g.
-       "20 December 2008 11:27:00 PM" -->
-
-  <time>2008-12-20</time>
-  <time data-format=date>2008-12-20T23:27+09:00</time>
-  <!-- Will be rendered as a date, e.g. "20 December 2008" -->
-
-  <time data-format=monthday>2008-12-20</time>
-  <time data-format=monthday>2008-12-20T23:27+09:00</time>
-  <!-- Will be rendered as a date, e.g. "20 December 2008" but the
-       year component is omitted if it is same as this year, e.g.
-       "December 20" if it's 2008. -->
-
-  <time data-format=monthdaytime>2008-12-20T23:27+09:00</time>
-  <!-- Will be rendered as a date and time, e.g.
-       "20 December 2008 11:27:00 PM" but the year component is omitted
-       if it is same as this year, e.g. "December 20 11:27:00 PM" if
-       it's 2008. -->
-
-  <time data-format=ambtime>2008-12-20T23:27+09:00</time>
-  <!-- Will be rendered as an "ambtime" in English or Japanese
-       depending on the user's language preference, such as "2 hours
-       ago", if the date is within 100 days from "today" -->
-
-  <time data-format=deltatime>2008-12-20T23:27+09:00</time>
-  <!-- Will be rendered as an "ambtime" in English or Japanese
-       depending on the user's language preference, such as "2 hours
-       ago" -->
-
-When the |time| element's |datetime| or |data-tzoffset| attribute
-value is changed, the element's content is updated appropriately.
-(Note that the element's content's mutation is ignored.)
-
-The '--timejs-serialization' CSS property can be used to specify the
-date and time serialization format.  This version supports following
-serializations:
-
-  Property value     Output example
-  -----------------  ----------------------------------
-  'auto' (default)   (platform dependent)
-  'dtsjp1'           令和元(2019)年9月28日 1時23分45秒
-  'dtsjp2'           R1(2019).9.28 1:23:45
-  'dtsjp3'           2019(R1)/9/28 1:23:45
-
-For backward compatibility with previous versions of this script, if
-there is no |data-time-selector| or |data-selector| attribute, the
-script does nothing by default, except for defining the |TER| global
-property.  By invoking |new TER (/element/)| or |new TER.Delta
-(/element/)| constructor, where /element/ is an element node, any
-|time| element in the /element/ subtree (or /element/ itself if it is
-a |time| element) is processed appropriately.  The |TER| constructor
-is equivalent to no |data-format| attribute and the |TER.Delta|
-constructor is equivalent to |data-format=ambtime|.
-
-Repository:
-
-Latest version of this script is available in Git repository
-<https://github.com/wakaba/timejs>.
-
-Specification:
-
-HTML Standard <https://html.spec.whatwg.org/#the-time-element>.
-
-This script interprets "global date and time string" using older
-parsing rules as defined in previous versions of the HTML spec, which
-is a willful violation to the current HTML Living Standard.
-
-*/
 
 /* ***** BEGIN LICENSE BLOCK *****
  *
- * Copyright 2008-2020 Wakaba <wakaba@suikawiki.org>.  All rights reserved.
+ * Copyright 2008-2024 Wakaba <wakaba@suikawiki.org>.  All rights reserved.
  *
  * Copyright 2017 Hatena <http://hatenacorp.jp/>.  All rights reserved.
  *

@@ -71,20 +71,32 @@
       value = Math.round (value * 100 * 10) / 10;
     } else if (type === 'duration') {
       e.textContent = '';
-      var format = e.getAttribute ('format') || 'h:mm:ss.ss';
+      let format = e.getAttribute ('format') || 'h:mm:ss.ss';
+      let unit = e.getAttribute ('unit');
       var h = Math.floor (value / 60 / 60);
       var m = Math.floor (value / 60) - h * 60;
       var s = value - m * 60 - h * 60 * 60;
-      if (format === 'h:mm:ss' || format === 'hh:mm:ss') {
+      if (format === 'h:mm:ss' || format === 'hh:mm:ss' ||
+          format === 'h:m:s') {
         s = Math.floor (s);
       } else {
         s = s.toFixed (2);
       }
-      e.appendChild (document.createElement ('number-value')).textContent = (!(format === 'hh:mm:ss' || format === 'hh:mm:ss.ss') || h >= 10) ? h : "0" + h;
-      e.appendChild (document.createElement ('number-separator')).textContent = ":";
-      e.appendChild (document.createElement ('number-value')).textContent = m >= 10 ? m : "0" + m;
-      e.appendChild (document.createElement ('number-separator')).textContent = ":";
-      e.appendChild (document.createElement ('number-value')).textContent = s >= 10 ? s : "0" + s;
+      e.appendChild (document.createElement ('number-value')).textContent = (!(format === 'hh:mm' || format === 'hh:mm:ss' || format === 'hh:mm:ss.ss') || h >= 10) ? h : "0" + h;
+      e.appendChild (document.createElement ('number-separator')).textContent = (unit === '時間' ? '時間' : ":");
+      e.appendChild (document.createElement ('number-value')).textContent = (format === 'h:m' || format === 'h:m:s' || format === 'h:m:s.ss' || m >= 10) ? m : "0" + m;
+      if (!(format === 'h:mm' || format === 'hh:mm')) {
+        e.appendChild (document.createElement ('number-separator')).textContent = (unit === '時間' ? '分' : ":");
+        if (unit === '時間') {
+          let ss = (format === 'h:m:s' || format === 'h:m:s.ss' || s >= 10) ? '' + s : "0" + s;
+          ss = ss.split (/\./);
+          e.appendChild (document.createElement ('number-value')).textContent = ss[0];
+          e.appendChild (document.createElement ('number-separator')).textContent = (unit === '時間' ? '秒' : ":");
+          if (ss.length > 1) e.appendChild (document.createElement ('number-value')).textContent = ss[1];
+        } else {
+          e.appendChild (document.createElement ('number-value')).textContent = (format === 'h:m:s' || format === 'h:m:s.ss' || s >= 10) ? s : "0" + s;
+        }
+      }
       e.removeAttribute ('hasseparator');
       return;
     } else if (type === 'bytes') {
@@ -120,6 +132,68 @@
     } else if (type === 'pixels') {
       value = Math.ceil (value * 10) / 10;
       unit = 'px';
+    } else if (type === 'yen') {
+      e.textContent = '';
+
+      var neg = value < 0;
+      if (neg) value = -value;
+
+      var kei = Math.floor (value / 10000000000000000);
+      if (kei) {
+        var ve = document.createElement ('number-value');
+        ve.textContent = kei;
+        e.appendChild (ve);
+        var ue = document.createElement ('number-unit');
+        ue.textContent = '京';
+        e.appendChild (ve);
+        e.appendChild (ue);
+      }
+      
+      var chou = Math.floor ((value % 10000000000000000) / 1000000000000);
+      if (chou) {
+        var ve = document.createElement ('number-value');
+        ve.textContent = chou;
+        var ue = document.createElement ('number-unit');
+        ue.textContent = '兆';
+        e.appendChild (ve);
+        e.appendChild (ue);
+      }
+
+      var oku = Math.floor ((value % 1000000000000) / 100000000);
+      if (oku) {
+        var ve = document.createElement ('number-value');
+        ve.textContent = oku;
+        var ue = document.createElement ('number-unit');
+        ue.textContent = '億';
+        e.appendChild (ve);
+        e.appendChild (ue);
+      }
+
+      var man = Math.floor ((value % 100000000) / 10000);
+      if (man) {
+        var ve = document.createElement ('number-value');
+        ve.textContent = man;
+        var ue = document.createElement ('number-unit');
+        ue.textContent = '万';
+        e.appendChild (ve);
+        e.appendChild (ue);
+      }
+
+      var one = value % 10000;
+      if (one || ! e.children.length) {
+        var ve = document.createElement ('number-value');
+        ve.textContent = one;
+        e.appendChild (ve);
+      }
+
+      if (neg) {
+        e.firstChild.textContent = "\u2212" + e.firstChild.textContent;
+      }
+
+      var ue = document.createElement ('number-unit');
+      ue.textContent = '円';
+      e.appendChild (ue);
+      return;
     }
     if (unit === '') {
       e.innerHTML = '<number-value></number-value>';
@@ -172,7 +246,7 @@
 
 /*
 
-Copyright 2017-2023 Wakaba <wakaba@suikawiki.org>.
+Copyright 2017-2024 Wakaba <wakaba@suikawiki.org>.
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as
