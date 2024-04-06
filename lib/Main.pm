@@ -185,7 +185,7 @@ sub filter_files ($$) {
     } else {
       my $ext = undef;
       $ext = $1 if $file->{file_name} =~ /\.([^\.]+)\z/;
-      my $xtype = $Ext2Executors->{$ext};
+      my $xtype = $Ext2Executors->{$ext // ''};
       if (defined $xtype) {
         $file->{executor} = {type => $xtype};
         push @$out_files, $file;
@@ -664,7 +664,7 @@ sub main ($@) {
 
 =head1 LICENSE
 
-Copyright 2018-2022 Wakaba <wakaba@suikawiki.org>.
+Copyright 2018-2024 Wakaba <wakaba@suikawiki.org>.
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself.

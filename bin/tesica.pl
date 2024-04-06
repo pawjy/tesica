@@ -14,6 +14,10 @@ tesica
 
   $ tesica
 
+If you don't have tesica yet:
+
+  $ curl -sSLf https://raw.githubusercontent.com/wakaba/tesica/master/tesica | perl
+
 =head1 TESTING
 
 The B<base directory> is the current directory.
@@ -466,7 +470,7 @@ until 14 March, 2022.
 
 =head1 LICENSE
 
-Copyright 2018-2022 Wakaba <wakaba@suikawiki.org>.
+Copyright 2018-2024 Wakaba <wakaba@suikawiki.org>.
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself.
