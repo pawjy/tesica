@@ -61,6 +61,8 @@ local/fatlib-files: local/fatpacker.packlists local/module-list.sh \
 	bash local/module-list.sh
 	cp -a local/fatlib/$(PERL_ARCHNAME)/* local/fatlib/
 	rm -fr local/fatlib/$(PERL_ARCHNAME)
+	rm -fr local/fatlib/Socket.pm
+	rm -fr local/fatlib/auto
 	rm local/fatlib/AnyEvent/*.pod local/fatlib/AnyEvent/constants.pl
 	mv local/fatlib/AnyEvent/Util/idna.pl local/fatlib/AnyEvent/Util/idna.pm
 	mv local/fatlib/AnyEvent/Util/uts46data.pl local/fatlib/AnyEvent/Util/uts46data.pm
