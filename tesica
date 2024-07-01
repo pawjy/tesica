@@ -24348,6 +24348,22 @@ $fatpacked{"Promised/File.pm"} = '#line '.(1+__LINE__).' "'.__FILE__."\"\n".<<'P
     });
   } # is_executable
   
+  sub chmod ($$) {
+    my ($self, $mode) = @_;
+    return Promise->new (sub {
+      my ($ok, $ng) = @_;
+      aio_chmod $self->{path}, $mode, sub {
+        return $ng->([0+$!, "".$!]) unless @_;
+        $ok->($_[0]);
+        delete $self->{stat};
+        delete $self->{lstat};
+      };
+    })->catch (sub {
+      require Streams::IOError;
+      die Streams::IOError->new_from_errno_and_message (@{$_[0]});
+    });
+  } # chmod
+  
   sub mkpath ($) {
     my $self = $_[0];
     return $self->is_directory->then (sub {
@@ -24394,8 +24410,9 @@ $fatpacked{"Promised/File.pm"} = '#line '.(1+__LINE__).' "'.__FILE__."\"\n".<<'P
     return __PACKAGE__->new_from_raw_path ($path)->mkpath;
   } # mkpath_parent
   
-  sub remove_tree ($) {
-    my $self = $_[0];
+  sub remove_tree ($;%) {
+    my ($self, %args) = @_;
+    my $safe = not $args{unsafe};
     return $self->stat->then (sub {
       if (-e $_[0]) {
         return Promise->new (sub {
@@ -24403,7 +24420,7 @@ $fatpacked{"Promised/File.pm"} = '#line '.(1+__LINE__).' "'.__FILE__."\"\n".<<'P
           my $path = $self->{path};
           fork_call {
             my $err;
-            my $args = {error => \$err, safe => 1};
+            my $args = {error => \$err, safe => $safe};
             require File::Path;
             File::Path::remove_tree ($path, $args);
             if (defined $err and @$err) {
@@ -24694,7 +24711,9 @@ $fatpacked{"Promised/File.pm"} = '#line '.(1+__LINE__).' "'.__FILE__."\"\n".<<'P
   } # lock_new_file
   
   sub hardlink_from ($$;%) {
-    my ($self, $from_path, %args) = @_;
+    my ($self, undef, %args) = @_;
+    my $in_path = $_[1];
+    my $from_path = encode_utf8 ($in_path);
     my $path = my $parent_path = $self->{path};
     $parent_path =~ s{[^/]*\z}{};
     return __PACKAGE__->new_from_raw_path ($parent_path)->mkpath->then (sub {
@@ -24716,7 +24735,6 @@ $fatpacked{"Promised/File.pm"} = '#line '.(1+__LINE__).' "'.__FILE__."\"\n".<<'P
         });
       }
     })->then (sub {
-      # XXX If another filesystem, copy
       return Promise->new (sub {
         my ($ok, $ng) = @_;
         aio_link $from_path => $path, sub {
@@ -24727,13 +24745,73 @@ $fatpacked{"Promised/File.pm"} = '#line '.(1+__LINE__).' "'.__FILE__."\"\n".<<'P
         };
       })->catch (sub {
         if (ref $_[0] eq 'ARRAY') {
+          if ($args{fallback_to_copy}) {
+            return $self->copy_from ($in_path, %args);
+          } else {
+            require Streams::IOError;
+            die Streams::IOError->new_from_errno_and_message (@{$_[0]});
+          }
+        }
+        die $_[0];
+      });
+    });
+  } # hardlink_from
+  
+  sub move_from ($$) {
+    my ($self, undef) = @_;
+    my $from_path = encode_utf8 ($_[1]);
+    my $path = my $parent_path = $self->{path};
+    $parent_path =~ s{[^/]*\z}{};
+    return __PACKAGE__->new_from_raw_path ($parent_path)->mkpath->then (sub {
+      return Promise->new (sub {
+        my ($ok, $ng) = @_;
+        require IO::AIO;
+        IO::AIO::aio_move ($from_path => $path, sub {
+          if ($_[0] == 0) {
+            $ok->();
+            delete $self->{stat};
+            delete $self->{lstat};
+          } else {
+            $ng->([0+$!, "".$!]);
+          }
+        });
+      })->catch (sub {
+        if (ref $_[0] eq 'ARRAY') {
           require Streams::IOError;
           die Streams::IOError->new_from_errno_and_message (@{$_[0]});
         }
         die $_[0];
       });
     });
-  } # hardlink_from
+  } # move_from
+  
+  sub copy_from ($$) {
+    my ($self, undef) = @_;
+    my $from_path = encode_utf8 ($_[1]);
+    my $path = my $parent_path = $self->{path};
+    $parent_path =~ s{[^/]*\z}{};
+    return __PACKAGE__->new_from_raw_path ($parent_path)->mkpath->then (sub {
+      return Promise->new (sub {
+        my ($ok, $ng) = @_;
+        require IO::AIO;
+        IO::AIO::aio_copy ($from_path => $path, sub {
+          if ($_[0] == 0) {
+            $ok->();
+            delete $self->{stat};
+            delete $self->{lstat};
+          } else {
+            $ng->([0+$!, "".$!]);
+          }
+        });
+      })->catch (sub {
+        if (ref $_[0] eq 'ARRAY') {
+          require Streams::IOError;
+          die Streams::IOError->new_from_errno_and_message (@{$_[0]});
+        }
+        die $_[0];
+      });
+    });
+  } # copy_from
   
   1;
   
