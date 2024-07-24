@@ -494,9 +494,9 @@ sub process_files ($$$) {
         for my $ee (@{$env->{tails}}) {
           $ee->{onstdout} = sub { };
         }
-        return $output_w->close;
-      })->finally (sub {
         return Promise->all (\@wait);
+      })->finally (sub {
+        return $output_w->close;
       })->then (sub {
         $env->{write_result}->();
         return not $need_retry;
