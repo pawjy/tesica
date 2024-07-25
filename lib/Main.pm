@@ -613,6 +613,54 @@ sub run_before ($$) {
   });
 } # run_before
 
+sub run_after ($$) {
+  my ($env, $result) = @_;
+  return unless (defined $env->{manifest}->{after} and
+                 ref $env->{manifest}->{after} eq 'ARRAY');
+  return Promise->resolve->then (sub {
+    my $i = 0;
+    return promised_for {
+      my $e = (defined $_[0] and ref $_[0] eq 'HASH') ? $_[0] : {run => $_[0]};
+      unless (defined $e->{run} and ref $e->{run} eq 'ARRAY') {
+        $e->{run} = ['bash', '-c', $e->{run}];
+      }
+
+      my $escaped_name = "after-".$i++;
+      my $fr = $result->{other_results}->{$escaped_name} = {
+        type => 'after',
+        result => {ok => 0},
+        times => {start => time},
+        run => $e->{run},
+      };
+
+      return run_command (
+        $env,
+        command => $e->{run},
+        before_try => sub {
+          my $output_path = $env->{result_dir_path}->child ('files')->child ($escaped_name . '.txt');
+          $fr->{output_file} = ''.$output_path->relative ($env->{result_dir_path});
+          return $output_path;
+        }, # before_try
+        pass => sub {
+          my ($try, $cr) = @_;
+          $fr->{times}->{end} = time;
+          $fr->{result}->{exit_code} = $cr->exit_code;
+          die $cr unless $cr->exit_code == 0;
+          $fr->{result}->{ok} = 1;
+          $fr->{result}->{completed} = 1;
+        }, # pass
+        fail => sub {
+          my ($try, $e) = @_;
+          $fr->{times}->{end} //= time;
+          $fr->{error}->{message} = ''.$e;
+          $fr->{result}->{completed} = 1;
+          return 0; # permanent failure, no retry
+        }, # fail
+      );
+    } $env->{manifest}->{after};
+  });
+} # run_after
+
 sub main ($@) {
   my ($class, @args) = @_;
   my @wait;
@@ -699,6 +747,8 @@ sub main ($@) {
       });
 
       return process_files $env, $files => $result;
+    })->finally (sub {
+      return run_after ($env, $result);
     });
   })->then (sub {
     if ($result->{result}->{fail}) {

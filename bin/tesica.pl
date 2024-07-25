@@ -41,6 +41,15 @@ name/value pairs:
 
 =over 4
 
+=item after : Array<Run>?
+
+Commands executed after the tests.  If specified, it must be an array
+of zero or more C<Run> objects, which are executed in order.
+
+Any failure is ignored; if a command fails, any following command is
+still executed.  Failure does not affect the exit code of the
+C<tesica> process.
+
 =item allow_failure : Array<String>?
 
 The files whose failures are ignored.  If specified, it must be an
@@ -53,6 +62,9 @@ tests nevertheless their results.
 
 Commands executed before the tests.  If specified, it must be an array
 of zero or more C<Run> objects, which are executed in order.
+
+If a command fails, any following command as well as tests are
+skipped.
 
 =item entangled_log_files : Array<String>?
 
@@ -489,6 +501,13 @@ The number of the skipped tests within the process, if known.
 C<CIRCLE_ARTIFACTS>: See L</TEST RESULTS>.
 
 C<TESICA_MANIFEST_FILE>: See L</TEST MANIFEST FILE>.
+
+=head1 EXIT STATUS
+
+When all tests passes, the C<tesica> process returns 0 (zero).
+
+When one or more tests fails, or one or more of commands specified in
+C<before> fails, the C<tesica> process returns 1 (one).
 
 =head1 AUTHOR
 
