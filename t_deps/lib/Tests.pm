@@ -163,6 +163,22 @@ sub run (%) {
       return path ($_[0] // die)->absolute ($base_path)->slurp;
     };
 
+    $return->{file_out} = sub {
+      my $channel = shift;
+      my $base_path = path ($return->{json}->{rule}->{result_dir});
+      my $bytes = path ($_[0] // die)->absolute ($base_path)->slurp;
+      my @r;
+      while ($bytes =~ s/^\x0A&([0-9]+) (-?[0-9]+) ([0-9.]+)\x0A//) {
+        my ($ch, $size, $time) = ($1, $2, $3);
+        if ($ch == $channel) {
+          last if $size == -1;
+          push @r, substr $bytes, 0, $size;
+          substr ($bytes, 0, $size) = '';
+        }
+      }
+      return join '', @r;
+    };
+
     $return->{result_file_bytes} = sub {
       my $name = $return->{json}->{file_results}->{$_[0] // die "Bad argument"}->{output_file} // die "File not found";
       return $return->{file_bytes}->($name);

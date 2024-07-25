@@ -49,6 +49,11 @@ array of zero or more paths, relative to the test manifest file.
 Failure-ignored tests are executed as usual but counted as passed
 tests nevertheless their results.
 
+=item before : Array<Run>?
+
+Commands executed before the tests.  If specified, it must be an array
+of zero or more C<Run> objects, which are executed in order.
+
 =item entangled_log_files : Array<String>?
 
 The entangled log files, i.e. files whose contents are to be merged
@@ -87,6 +92,23 @@ or more paths, relative to the test manifest file.
 Skipped tests are not executed at all but counted as passed tests.
 
 =back
+
+=head2 Run objects
+
+A C<Run> object is a JSON object with following name/value pairs:
+
+=over 4
+
+=item run : String | Array<String>
+
+The command to execute.  If a string is specified, it is executed by
+C<bash>.  Otherwise, the array is used as the command and the
+arguments.
+
+=back
+
+If a C<Run> object would have only a C<run> string, it can be replaced
+by the string only.
 
 =head1 TEST RESULTS
 

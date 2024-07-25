@@ -304,109 +304,19 @@ sub stop_log_watching ($$) {
   return Promise->all ([map { $_->catch (sub { }) } @wait]);
 } # stop_log_watching
 
-sub process_files ($$$) {
-  my ($env, $file_paths, $result) = @_;
+sub run_command ($%) {
+  my ($env, %args) = @_;
 
-  my $failure_allowed = {};
-  if (ref $env->{manifest}->{allow_failure} eq 'ARRAY') {
-    for (@{$env->{manifest}->{allow_failure}}) {
-      my $path = path_full (length $_ ? path ($_)->absolute ($env->{manifest_base_path}) : $env->{manifest_base_path});
-      $failure_allowed->{$path} = 1;
-    }
-  }
+  my $try = 0;
+  return promised_until {
+    $try++;
+    my $need_retry = 0;
 
-  my $max_cfailure_count = 0+($env->{manifest}->{max_consecutive_failures} || 0);
-  $max_cfailure_count = 0 unless $max_cfailure_count > 0;
-  $result->{rule}->{max_consecutive_failures} = $max_cfailure_count
-      if $max_cfailure_count;
+      my $output_path = $args{before_try}->($try);
 
-  my $max_retry_count = 0+($env->{manifest}->{max_retries} || 0);
-  $max_retry_count = 0 unless $max_retry_count > 0;
-  $result->{rule}->{max_retries} = $max_retry_count;
-
-  my $count = 0+@$file_paths;
-  my $n = 0;
-  my $cfailure_count = 0;
-  return promised_for {
-    my $file = shift;
-    my $file_name = $file->{path}->relative ($env->{base_dir_path});
-    my $fr = $result->{file_results}->{$file_name} = {
-      result => {ok => 0},
-      times => {start => time},
-    };
-
-    $fr->{executor} = $file->{executor};
-
-    $n++;
-    if ($file->{error}) {
-      $fr->{times}->{end} = $fr->{times}->{start} = $file->{time};
-      $fr->{error} = $file->{error};
-      if ($file->{error}->{message} eq 'Skipped by request') {
-        $result->{result}->{skipped}++;
-      } else {
-        $result->{result}->{fail}++;
-      }
-      return;
-    }
-
-    if (($max_cfailure_count and $cfailure_count > $max_cfailure_count) or
-        $env->{terminate}) {
-      $fr->{times}->{end} = $fr->{times}->{start} = $file->{time};
-      $fr->{error} = {message => 'Too many failures before this test'};
-      $result->{result}->{skipped}++;
-      return;
-    }
-
-    my $try = 0;
-    return promised_until {
-      $try++;
-      my $need_retry = 0;
-
-      if ($try > 1) {
-        printf STDERR "%d/%d [%s] |%s| (retry %d/%s)...",
-            $n, $count, $fr->{executor}->{type}, $file_name,
-            $try-1, $max_retry_count;
-        my $list;
-        if ($try == 2) {
-          $list = [$fr];
-        } else {
-          $list = delete $fr->{tries};
-          push @$list, $fr;
-        }
-        $fr = $result->{file_results}->{$file_name} = {
-          result => {ok => 0},
-          times => {start => time},
-          tries => $list,
-          executor => $fr->{executor},
-        };
-      } else { # first time
-        printf STDERR "(Pass: %d, Fail: %d)\n",
-            $result->{result}->{pass},
-            $result->{result}->{fail}
-            if ($n % 10) == 0;
-        printf STDERR "%d/%d [%s] |%s|...",
-            $n, $count, $fr->{executor}->{type}, $file_name;
-      }
-
-      #$fr->{executor}->{type} eq 'perl'
-      my $xenv = $env->{executors}->{$fr->{executor}->{type}};
-
-      my $cmd = Promised::Command->new ([
-        @{$xenv->{perl_command}},
-        $file->{path},
-      ]);
+      my $cmd = Promised::Command->new ($args{command});
       $cmd->envs->{CIRCLE_ARTIFACTS} = $env->{result_dir_path};
       
-      my $escaped_name = $file_name;
-      $escaped_name =~ s{([^A-Za-z0-9])}{sprintf '_%02X', ord $1}ge;
-      my $output_path = $env->{result_dir_path}->child ('files');
-      if ($try > 1) {
-        $output_path = $output_path->child
-            ($escaped_name . '-' . $try . '.txt');
-      } else {
-        $output_path = $output_path->child ($escaped_name . '.txt');
-      }
-      $fr->{output_file} = ''.$output_path->relative ($env->{result_dir_path});
       my $output_ws = Promised::File->new_from_path
           ($output_path)->write_bytes;
       my $output_w = $output_ws->get_writer;
@@ -465,15 +375,145 @@ sub process_files ($$$) {
         });
       });
     };
+      if ($args{with_tails}) {
       for my $ee (@{$env->{tails}}) {
         $ee->{onstdout} = sub {
           $output_chunk->($ee->{channel}, $_[0]);
         };
       }
+    } # with_tails
       return $cmd->run->then (sub {
         return $cmd->wait;
       })->then (sub {
         my $cr = $_[0];
+        $args{pass}->($try, $cr); # or die
+      })->catch (sub {
+        my $e = $_[0];
+        if ($args{fail}->($try, $e)) {
+          $need_retry = 1;
+          return;
+        }
+      })->finally (sub {
+                     if ($args{with_tails}) {
+        for my $ee (@{$env->{tails}}) {
+          $ee->{onstdout} = sub { };
+        }
+      }
+        return Promise->all (\@wait);
+      })->finally (sub {
+        return $output_w->close;
+      })->then (sub {
+        $env->{write_result}->();
+        return not $need_retry;
+      });
+    };
+} # run_command
+
+sub process_files ($$$) {
+  my ($env, $file_paths, $result) = @_;
+
+  my $failure_allowed = {};
+  if (ref $env->{manifest}->{allow_failure} eq 'ARRAY') {
+    for (@{$env->{manifest}->{allow_failure}}) {
+      my $path = path_full (length $_ ? path ($_)->absolute ($env->{manifest_base_path}) : $env->{manifest_base_path});
+      $failure_allowed->{$path} = 1;
+    }
+  }
+
+  my $max_cfailure_count = 0+($env->{manifest}->{max_consecutive_failures} || 0);
+  $max_cfailure_count = 0 unless $max_cfailure_count > 0;
+  $result->{rule}->{max_consecutive_failures} = $max_cfailure_count
+      if $max_cfailure_count;
+
+  my $max_retry_count = 0+($env->{manifest}->{max_retries} || 0);
+  $max_retry_count = 0 unless $max_retry_count > 0;
+  $result->{rule}->{max_retries} = $max_retry_count;
+
+  my $count = 0+@$file_paths;
+  my $n = 0;
+  my $cfailure_count = 0;
+  return promised_for {
+    my $file = shift;
+    my $file_name = $file->{path}->relative ($env->{base_dir_path});
+    my $fr = $result->{file_results}->{$file_name} = {
+      result => {ok => 0},
+      times => {start => time},
+    };
+
+    $fr->{executor} = $file->{executor};
+
+    $n++;
+    if ($file->{error}) {
+      $fr->{times}->{end} = $fr->{times}->{start} = $file->{time};
+      $fr->{error} = $file->{error};
+      if ($file->{error}->{message} eq 'Skipped by request') {
+        $result->{result}->{skipped}++;
+      } else {
+        $result->{result}->{fail}++;
+      }
+      return;
+    }
+
+    if (($max_cfailure_count and $cfailure_count > $max_cfailure_count) or
+        $env->{terminate}) {
+      $fr->{times}->{end} = $fr->{times}->{start} = $file->{time};
+      $fr->{error} = {message => 'Too many failures before this test'};
+      $result->{result}->{skipped}++;
+      return;
+    }
+    
+    #$fr->{executor}->{type} eq 'perl'
+    my $xenv = $env->{executors}->{$fr->{executor}->{type}};
+    return run_command (
+      $env,
+      command => [
+        @{$xenv->{perl_command}},
+        $file->{path},
+      ],
+      with_tails => 1,
+      before_try => sub {
+        my ($try) = @_;
+      if ($try > 1) {
+        printf STDERR "%d/%d [%s] |%s| (retry %d/%s)...",
+            $n, $count, $fr->{executor}->{type}, $file_name,
+            $try-1, $max_retry_count;
+        my $list;
+        if ($try == 2) {
+          $list = [$fr];
+        } else {
+          $list = delete $fr->{tries};
+          push @$list, $fr;
+        }
+        $fr = $result->{file_results}->{$file_name} = {
+          result => {ok => 0},
+          times => {start => time},
+          tries => $list,
+          executor => $fr->{executor},
+        };
+      } else { # first time
+        printf STDERR "(Pass: %d, Fail: %d)\n",
+            $result->{result}->{pass},
+            $result->{result}->{fail}
+            if ($n % 10) == 0;
+        printf STDERR "%d/%d [%s] |%s|...",
+            $n, $count, $fr->{executor}->{type}, $file_name;
+      }
+
+        my $escaped_name = $file_name;
+        $escaped_name =~ s{([^A-Za-z0-9])}{sprintf '_%02X', ord $1}ge;
+      my $output_path = $env->{result_dir_path}->child ('files');
+      if ($try > 1) {
+        $output_path = $output_path->child
+            ($escaped_name . '-' . $try . '.txt');
+      } else {
+        $output_path = $output_path->child ($escaped_name . '.txt');
+      }
+      $fr->{output_file} = ''.$output_path->relative ($env->{result_dir_path});
+
+        return $output_path;
+      }, # before_try
+      pass => sub {
+        my ($try, $cr) = @_;
         $fr->{times}->{end} = time;
         $fr->{result}->{exit_code} = $cr->exit_code;
         die $cr unless $cr->exit_code == 0;
@@ -486,8 +526,9 @@ sub process_files ($$$) {
         warn sprintf " pass (%d s)\n",
             $fr->{times}->{end} - $fr->{times}->{start};
         $cfailure_count = 0;
-      })->catch (sub {
-        my $e = $_[0];
+      }, # pass
+      fail => sub {
+        my ($try, $e) = @_;
         $fr->{times}->{end} //= time;
         $fr->{error}->{message} = ''.$e;
         $fr->{result}->{completed} = 1;
@@ -503,25 +544,74 @@ sub process_files ($$$) {
           if ($try > $max_retry_count) {
             $result->{result}->{fail}++;
           } else {
-            $need_retry = 1;
-            return;
+            return 1; # failure, need retry
           }
         }
         $cfailure_count++;
-      })->finally (sub {
-        for my $ee (@{$env->{tails}}) {
-          $ee->{onstdout} = sub { };
-        }
-        return Promise->all (\@wait);
-      })->finally (sub {
-        return $output_w->close;
-      })->then (sub {
-        $env->{write_result}->();
-        return not $need_retry;
-      });
-    };
+        return 0; # permanent failure, no retry
+      }, # fail
+    );
   } $file_paths;
 } # process_files
+
+sub run_before ($$) {
+  my ($env, $result) = @_;
+  return unless (defined $env->{manifest}->{before} and
+                 ref $env->{manifest}->{before} eq 'ARRAY');
+  my $failed = 0;
+  return Promise->resolve->then (sub {
+    my $i = 0;
+    return promised_for {
+      my $e = (defined $_[0] and ref $_[0] eq 'HASH') ? $_[0] : {run => $_[0]};
+      unless (defined $e->{run} and ref $e->{run} eq 'ARRAY') {
+        $e->{run} = ['bash', '-c', $e->{run}];
+      }
+
+      my $escaped_name = "before-".$i++;
+      my $fr = $result->{other_results}->{$escaped_name} = {
+        type => 'before',
+        result => {ok => 0},
+        times => {start => time},
+        run => $e->{run},
+      };
+
+      if ($failed) {
+        $fr->{times}->{end} = $fr->{times}->{start};
+        $fr->{error} = {message => 'Failed before this test'};
+        return;
+      }
+
+      return run_command (
+        $env,
+        command => $e->{run},
+        before_try => sub {
+          my $output_path = $env->{result_dir_path}->child ('files')->child ($escaped_name . '.txt');
+          $fr->{output_file} = ''.$output_path->relative ($env->{result_dir_path});
+          return $output_path;
+        }, # before_try
+        pass => sub {
+          my ($try, $cr) = @_;
+          $fr->{times}->{end} = time;
+          $fr->{result}->{exit_code} = $cr->exit_code;
+          die $cr unless $cr->exit_code == 0;
+          $fr->{result}->{ok} = 1;
+          $fr->{result}->{completed} = 1;
+        }, # pass
+        fail => sub {
+          my ($try, $e) = @_;
+          $fr->{times}->{end} //= time;
+          $fr->{error}->{message} = ''.$e;
+          $fr->{result}->{completed} = 1;
+          $failed = 1;
+          return 0; # permanent failure, no retry
+        }, # fail
+      );
+    } $env->{manifest}->{before};
+  })->then (sub {
+    return unless $failed;
+    die "|before| command failed\n";
+  });
+} # run_before
 
 sub main ($@) {
   my ($class, @args) = @_;
@@ -589,7 +679,11 @@ sub main ($@) {
       $env->{executors}->{$_->{executor}->{type}} = {} if defined $_->{executor};
       {file_name_path => $_->{file_name_path}};
     } @$files];
-    return load_executors ($env, $result)->then (sub {
+    return Promise->resolve->then (sub {
+      return run_before ($env, $result);
+    })->then (sub {
+      return load_executors ($env, $result);
+    })->then (sub {
       return start_log_watching ($env, $result);
     })->then (sub {
       $env->{write_result}->();
