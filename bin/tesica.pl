@@ -111,6 +111,18 @@ A C<Run> object is a JSON object with following name/value pairs:
 
 =over 4
 
+=item background : Boolean
+
+If true and the C<Run> object is used as a C<before> command, the
+following C<before> commands, as well as tests, are executed without
+waiting for the completion of this command.
+
+A C<TERM> signal is sent to the command after the tests (but before
+the C<after> commands), if it is running.
+
+A C<KILL> signal is sent to the command after 10 seconds from the
+C<TERM> signal, if it is still running.
+
 =item run : String | Array<String>
 
 The command to execute.  If a string is specified, it is executed by

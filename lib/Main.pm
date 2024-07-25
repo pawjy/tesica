@@ -375,38 +375,49 @@ sub run_command ($%) {
         });
       });
     };
-      if ($args{with_tails}) {
+
+    if ($args{with_tails}) {
       for my $ee (@{$env->{tails}}) {
         $ee->{onstdout} = sub {
           $output_chunk->($ee->{channel}, $_[0]);
         };
       }
     } # with_tails
-      return $cmd->run->then (sub {
-        return $cmd->wait;
-      })->then (sub {
-        my $cr = $_[0];
-        $args{pass}->($try, $cr); # or die
-      })->catch (sub {
-        my $e = $_[0];
-        if ($args{fail}->($try, $e)) {
-          $need_retry = 1;
-          return;
-        }
-      })->finally (sub {
-                     if ($args{with_tails}) {
+
+    my $acs = AbortController->new;
+    $args{signal}->manakai_onabort (sub {
+      $cmd->send_signal ('TERM');
+      promised_sleep (10, signal => $acs->signal)->then (sub {
+        $cmd->send_signal ('KILL');
+      })->catch (sub { });
+    }) if defined $args{signal};
+
+    return $cmd->run->then (sub {
+      return $cmd->wait;
+    })->then (sub {
+      my $cr = $_[0];
+      $args{pass}->($try, $cr); # or die
+    })->catch (sub {
+      my $e = $_[0];
+      if ($args{fail}->($try, $e)) {
+        $need_retry = 1;
+        return;
+      }
+    })->finally (sub {
+      if ($args{with_tails}) {
         for my $ee (@{$env->{tails}}) {
           $ee->{onstdout} = sub { };
         }
       }
-        return Promise->all (\@wait);
-      })->finally (sub {
-        return $output_w->close;
-      })->then (sub {
-        $env->{write_result}->();
-        return not $need_retry;
-      });
-    };
+      $acs->abort;
+      return Promise->all (\@wait);
+    })->finally (sub {
+      return $output_w->close;
+    })->then (sub {
+      $env->{write_result}->();
+      return not $need_retry;
+    });
+  };
 } # run_command
 
 sub process_files ($$$) {
@@ -567,9 +578,9 @@ sub run_before ($$) {
         $e->{run} = ['bash', '-c', $e->{run}];
       }
 
-      my $escaped_name = "before-".$i++;
+      my $escaped_name = ($e->{background} ? 'background' : "before") . "-".$i++;
       my $fr = $result->{other_results}->{$escaped_name} = {
-        type => 'before',
+        type => ($e->{background} ? 'background' : 'before'),
         result => {ok => 0},
         times => {start => time},
         run => $e->{run},
@@ -581,9 +592,11 @@ sub run_before ($$) {
         return;
       }
 
-      return run_command (
+      my $ac = AbortController->new;
+      my $p = run_command (
         $env,
         command => $e->{run},
+        with_tails => ! $e->{background},
         before_try => sub {
           my $output_path = $env->{result_dir_path}->child ('files')->child ($escaped_name . '.txt');
           $fr->{output_file} = ''.$output_path->relative ($env->{result_dir_path});
@@ -605,7 +618,13 @@ sub run_before ($$) {
           $failed = 1;
           return 0; # permanent failure, no retry
         }, # fail
+        signal => $ac->signal,
       );
+      if ($e->{background}) {
+        push @{$env->{backgrounds}}, [$p, $ac];
+      } else {
+        return $p;
+      }
     } $env->{manifest}->{before};
   })->then (sub {
     return unless $failed;
@@ -615,9 +634,17 @@ sub run_before ($$) {
 
 sub run_after ($$) {
   my ($env, $result) = @_;
-  return unless (defined $env->{manifest}->{after} and
-                 ref $env->{manifest}->{after} eq 'ARRAY');
+
+  my @wait;
+  for (@{$env->{backgrounds}}) {
+    $_->[1]->abort;
+    push @wait, $_->[0];
+  }
+  
   return Promise->resolve->then (sub {
+    return unless (defined $env->{manifest}->{after} and
+                   ref $env->{manifest}->{after} eq 'ARRAY');
+
     my $i = 0;
     return promised_for {
       my $e = (defined $_[0] and ref $_[0] eq 'HASH') ? $_[0] : {run => $_[0]};
@@ -658,6 +685,8 @@ sub run_after ($$) {
         }, # fail
       );
     } $env->{manifest}->{after};
+  })->then (sub {
+    return Promise->all (\@wait);
   });
 } # run_after
 
@@ -667,7 +696,7 @@ sub main ($@) {
   
   my $rule = {};
   my $env = {executors => {}, write_result => sub { },
-             manifest => {}, tails => []};
+             manifest => {}, tails => [], backgrounds => []};
 
   my $result = {result => {exit_code => 1, pass => 0, fail => 0,
                            skipped => 0, failure_ignored => 0,
