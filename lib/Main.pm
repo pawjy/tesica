@@ -197,7 +197,25 @@ sub filter_files ($$) {
       }
     }
   }
-  $out_files = [sort { $a->{path} cmp $b->{path} } @$out_files];
+
+  for (@$out_files) {
+    $_->{file_name_path} = '' . $_->{path}->relative ($env->{base_dir_path});
+  }
+  
+  my $pri = {};
+  if (defined $env->{manifest}->{priority} and
+      ref $env->{manifest}->{priority} eq 'ARRAY') {
+    my $i = 0;
+    for (reverse @{$env->{manifest}->{priority}}) {
+      my $path = path_full (length $_ ? path ($_)->absolute ($env->{manifest_base_path}) : $env->{manifest_base_path});
+      $pri->{$path} = ++$i;
+    }
+  }
+  $out_files = [sort {
+    ($pri->{$b->{path}} || 0) <=> ($pri->{$a->{path}} || 0) ||
+    $a->{path} cmp $b->{path};
+  } @$out_files];
+  
   return $out_files;
 } # filter_files
 
@@ -569,7 +587,7 @@ sub main ($@) {
     my $files = $_[0];
     $result->{files} = [map {
       $env->{executors}->{$_->{executor}->{type}} = {} if defined $_->{executor};
-      {file_name_path => '' . $_->{path}->relative ($env->{base_dir_path})};
+      {file_name_path => $_->{file_name_path}};
     } @$files];
     return load_executors ($env, $result)->then (sub {
       return start_log_watching ($env, $result);

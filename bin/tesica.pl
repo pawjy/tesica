@@ -70,6 +70,15 @@ The maximum number of retries upon failures.  Defaulted to zero.  If a
 test script fails, it is retried at most I<max_retries> times.  If one
 of retries passes, the test script is marked as passed.
 
+=item priority : Array<String>?
+
+The order tests are executed.  If specified, it must be an array of
+zero or more paths, relative to the test manifest file.
+
+Tests are executed in order specified in the array.  Any tests not
+listed in the array is executed after the listed tests.  Any listed
+file not actually found is silently ignored.
+
 =item skip : Array<String>?
 
 The files that are skipped.  If specified, it must be an array of zero
