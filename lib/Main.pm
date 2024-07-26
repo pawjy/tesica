@@ -778,7 +778,7 @@ sub main ($@) {
         ($env->{result_json_path});
     $env->{write_result} = sub {
       $result->{times}->{now} = time;
-      warn "Result: |$env->{result_json_path}|\n" if $ENV{CI};
+      #warn "Result: |$env->{result_json_path}|\n" if $ENV{CI};
       return $result_json_file->write_byte_string (perl2json_bytes $result);
     }; # write_result
 
