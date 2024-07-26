@@ -178,11 +178,48 @@ Test {
   });
 } n => 14, name => 'max_consecutive_failures less';
 
+Test {
+  my $c = shift;
+  return run (
+    files => {
+      't/abc1.t' => {perl_test => 'ok'},
+      't/abc2.t' => {perl_test => 'ng'},
+      't/abc3.t' => {perl_test => 'ng'},
+      't/abc4.t' => {perl_test => 'ng'},
+      't/abc5.t' => {perl_test => 'ok'},
+      'manifest.json' => {json => {
+        max_consecutive_failures => 0,
+      }},
+    },
+    manifest => 'manifest.json',
+  )->then (sub {
+    my $return = $_[0];
+    test {
+      my $json = $return->{json};
+      is $return->{result}->exit_code, 1;
+      is 0+@{$json->{files}}, 5;
+      ok $json->{file_results}->{'t/abc1.t'}->{result}->{ok};
+      ok ! $json->{file_results}->{'t/abc2.t'}->{result}->{ok};
+      ok ! $json->{file_results}->{'t/abc3.t'}->{result}->{ok};
+      ok ! $json->{file_results}->{'t/abc4.t'}->{result}->{ok};
+      ok ! $json->{file_results}->{'t/abc5.t'}->{result}->{ok};
+      is $json->{file_results}->{'t/abc2.t'}->{error}->{message}, 'Command |perl|: Exit code 1';
+      is $json->{file_results}->{'t/abc3.t'}->{error}->{message}, 'Too many failures before this test';
+      is $json->{result}->{pass}, 1;
+      is $json->{result}->{fail}, 1;
+      is $json->{result}->{skipped}, 3;
+      is $json->{result}->{failure_ignored}, 0;
+      is $json->{rule}->{max_consecutive_failures}, 0;
+      unlike $return->{stderr}, qr{Failed tests:.+t/abc3.t}s;
+    } $c;
+  });
+} n => 15, name => 'max_consecutive_failures 1';
+
 run_tests;
 
 =head1 LICENSE
 
-Copyright 2022 Wakaba <wakaba@suikawiki.org>.
+Copyright 2022-2024 Wakaba <wakaba@suikawiki.org>.
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself.

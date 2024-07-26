@@ -436,10 +436,9 @@ sub process_files ($$$) {
     }
   }
 
-  my $max_cfailure_count = 0+($env->{manifest}->{max_consecutive_failures} || 0);
-  $max_cfailure_count = 0 unless $max_cfailure_count > 0;
+  my $max_cfailure_count = 0+($env->{manifest}->{max_consecutive_failures} // "inf");
   $result->{rule}->{max_consecutive_failures} = $max_cfailure_count
-      if $max_cfailure_count;
+      if $max_cfailure_count >= 0 and $max_cfailure_count < "inf";
 
   my $max_retry_count = 0+($env->{manifest}->{max_retries} || 0);
   $max_retry_count = 0 unless $max_retry_count > 0;
@@ -470,8 +469,7 @@ sub process_files ($$$) {
       return;
     }
 
-    if (($max_cfailure_count and $cfailure_count > $max_cfailure_count) or
-        $env->{terminate}) {
+    if ($cfailure_count > $max_cfailure_count or $env->{terminate}) {
       $fr->{times}->{end} = $fr->{times}->{start} = $file->{time};
       $fr->{error} = {message => 'Too many failures before this test'};
       $result->{result}->{skipped}++;
