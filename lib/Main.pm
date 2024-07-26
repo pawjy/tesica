@@ -777,6 +777,7 @@ sub main ($@) {
         ($env->{result_json_path});
     $env->{write_result} = sub {
       $result->{times}->{now} = time;
+      warn "Result: |$env->{result_json_path}|\n" if $ENV{CI};
       return $result_json_file->write_byte_string (perl2json_bytes $result);
     }; # write_result
 
@@ -791,16 +792,16 @@ sub main ($@) {
       {file_name_path => $_->{file_name_path}};
     } @$files];
     return Promise->resolve->then (sub {
+      warn sprintf "Result: |%s|\n",
+          $env->{result_json_path};
+      $env->{write_result}->();
+
       return run_before ($env, $result);
     })->then (sub {
       return load_executors ($env, $result);
     })->then (sub {
       return start_log_watching ($env, $result);
     })->then (sub {
-      $env->{write_result}->();
-      warn sprintf "Result: |%s|\n",
-          $env->{result_json_path};
-
       ## Capture rare error cases
       log_watching_failure ($env, sub {
         my $e = $_[0];
@@ -852,7 +853,7 @@ sub main ($@) {
       if (@$afs) {
         warn "Failure-ignored tests:\n";
         warn join '', map { "  |$_|\n" } sort { $a cmp $b } @$afs;
-      }
+y      }
       if (@$files) {
         warn "Failed tests:\n";
         warn join '', map { "  |$_|\n" } sort { $a cmp $b } @$files;
