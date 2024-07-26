@@ -196,6 +196,10 @@ sub run (%) {
     return $json_file->read_byte_string->then (sub {
       my $json = json_bytes2perl $_[0];
       $return->{json} = $json;
+      if ($ENV{TEST_SHOW_OUTPUT}) {
+        warn "JSON output |$json_path|\n";
+        warn perl2json_bytes_for_record $json;
+      }
     }, sub {
       #
     })->then (sub { return $return });
