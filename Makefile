@@ -114,6 +114,6 @@ test-main-files:
 	TEST_SHOW_OUTPUT=$$CI $(PROVE) t/*.t
 
 test-main-compiled:
-	TEST_COMPILED_TESICA=1 $(PROVE) t/*.t
+	TEST_COMPILED_TESICA=1 $(PROVE) --verbose t/*.t
 
 ## License: Public Domain.
