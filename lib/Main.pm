@@ -414,7 +414,8 @@ sub run_command ($%) {
     })->finally (sub {
       return $output_w->close;
     })->then (sub {
-      $env->{write_result}->();
+      return $env->{write_result}->();
+    })->then (sub {
       if ($need_retry and $args{interval}) {
         return promised_sleep $args{interval};
       }
@@ -777,7 +778,7 @@ sub main ($@) {
         ($env->{result_json_path});
     $env->{write_result} = sub {
       $result->{times}->{now} = time;
-#XXX      warn "Result: |$env->{result_json_path}|\n" if $ENV{CI};
+      warn "Result: |$env->{result_json_path}|\n" if $ENV{CI};
       return $result_json_file->write_byte_string (perl2json_bytes $result);
     }; # write_result
 
@@ -794,8 +795,8 @@ sub main ($@) {
     return Promise->resolve->then (sub {
       warn sprintf "Result: |%s|\n",
           $env->{result_json_path};
-      $env->{write_result}->();
-
+      return $env->{write_result}->();
+    })->then (sub {
       return run_before ($env, $result);
     })->then (sub {
       return load_executors ($env, $result);
