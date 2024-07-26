@@ -415,6 +415,10 @@ sub run_command ($%) {
       return $output_w->close;
     })->then (sub {
       $env->{write_result}->();
+      if ($need_retry and $args{interval}) {
+        return promised_sleep $args{interval};
+      }
+    })->then (sub {
       return not $need_retry;
     });
   };
@@ -509,7 +513,13 @@ sub process_files ($$$) {
         printf STDERR "%d/%d [%s] |%s|...",
             $n, $count, $fr->{executor}->{type}, $file_name;
       }
-
+        $fr->{current_try_count} = $try;
+        $fr->{max_try_count} = $max_retry_count + 1;
+        $fr->{command} = [
+          @{$xenv->{perl_command}},
+          $file->{path},
+        ];
+        
         my $escaped_name = $file_name;
         $escaped_name =~ s{([^A-Za-z0-9])}{sprintf '_%02X', ord $1}ge;
       my $output_path = $env->{result_dir_path}->child ('files');
@@ -578,13 +588,17 @@ sub run_before ($$) {
         $e->{run} = ['bash', '-c', $e->{run}];
       }
 
-      my $escaped_name = ($e->{background} ? 'background' : "before") . "-".$i++;
+      my $escaped_name = ($e->{check} ? 'check' : $e->{background} ? 'background' : "before") . "-".$i++;
       my $fr = $result->{other_results}->{$escaped_name} = {
-        type => ($e->{background} ? 'background' : 'before'),
+        type => ($e->{check} ? 'check' : $e->{background} ? 'background' : 'before'),
         result => {ok => 0},
         times => {start => time},
-        run => $e->{run},
+        command => $e->{run},
+        current_try_count => 1,
       };
+
+      my $max_try_count = $fr->{max_try_count} = $e->{check} ? 1+($e->{max_retries} || 99) : 1;
+      my $interval = 0+($e->{interval} || 1);
 
       if ($failed) {
         $fr->{times}->{end} = $fr->{times}->{start};
@@ -598,8 +612,11 @@ sub run_before ($$) {
         command => $e->{run},
         with_tails => ! $e->{background},
         before_try => sub {
+          my $try = $_[0];
           my $output_path = $env->{result_dir_path}->child ('files')->child ($escaped_name . '.txt');
           $fr->{output_file} = ''.$output_path->relative ($env->{result_dir_path});
+          $fr->{current_try_count} = $try;
+          $fr->{max_try_count} = $max_try_count;
           return $output_path;
         }, # before_try
         pass => sub {
@@ -611,16 +628,29 @@ sub run_before ($$) {
           $fr->{result}->{completed} = 1;
         }, # pass
         fail => sub {
-          my ($try, $e) = @_;
+          my ($try, $err) = @_;
           $fr->{times}->{end} //= time;
-          $fr->{error}->{message} = ''.$e;
+          $fr->{error}->{message} = ''.$err;
           $fr->{result}->{completed} = 1;
-          $failed = 1;
-          return 0; # permanent failure, no retry
+          if ($e->{check} and $try < $max_try_count) {
+            $fr = $result->{other_results}->{$escaped_name} = {
+              type => ($e->{check} ? 'check' : $e->{background} ? 'background' : 'before'),
+              result => {ok => 0},
+              times => {start => time},
+              command => $e->{run},
+              current_try_count => $try,
+              max_try_count => $max_try_count,
+            };
+            return 1;
+          } else {
+            $failed = 1;
+            return 0; # permanent failure, no retry
+          }
         }, # fail
         signal => $ac->signal,
+        interval => $interval,
       );
-      if ($e->{background}) {
+      if ($e->{background} and not $e->{check}) {
         push @{$env->{backgrounds}}, [$p, $ac];
       } else {
         return $p;
@@ -657,15 +687,18 @@ sub run_after ($$) {
         type => 'after',
         result => {ok => 0},
         times => {start => time},
-        run => $e->{run},
+        command => $e->{run},
       };
 
       return run_command (
         $env,
         command => $e->{run},
         before_try => sub {
+          my $try = $_[0];
           my $output_path = $env->{result_dir_path}->child ('files')->child ($escaped_name . '.txt');
           $fr->{output_file} = ''.$output_path->relative ($env->{result_dir_path});
+          $fr->{current_try_count} = $try;
+          $fr->{max_try_count} = 1;
           return $output_path;
         }, # before_try
         pass => sub {
@@ -703,6 +736,7 @@ sub main ($@) {
                            pass_after_retry => 0},
                 rule => {entangled_logs => {}},
                 times => {start => time},
+                other_results => {},
                 file_results => {}, executors => {}};
 
   $result->{rule}->{envs} = {%ENV};

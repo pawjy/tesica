@@ -37,9 +37,11 @@ Test {
       }
       is 0+@{$json->{executors}->{perl}->{perl_command}}, 1;
       is $json->{executors}->{perl}->{perl_command}->[0], '' . $return->{base_path}->child ('perl')->realpath;
+      is $json->{file_results}->{'t/abc.t'}->{command}->[0], $json->{executors}->{perl}->{perl_command}->[0];
+      is $json->{file_results}->{'t/abc.t'}->{command}->[1], '' . $return->{base_path}->child ('t/abc.t')->realpath;
     } $c;
   });
-} n => 8, name => ['perl'];
+} n => 10, name => ['perl'];
 
 run_tests;
 

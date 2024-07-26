@@ -53,8 +53,10 @@ Test {
         ok $r->{result}->{completed};
         is $r->{result}->{exit_code}, 0;
         ok $r->{result}->{ok};
-        is $r->{run}->[0], 'bash';
-        is $r->{run}->[1], '-c';
+        is $r->{command}->[0], 'bash';
+        is $r->{command}->[1], '-c';
+        is $r->{current_try_count}, 1;
+        is $r->{max_try_count}, 1;
         push @x, $return->{file_out}->(1, $r->{output_file});
       }
       push @x, $return->{file_out}->(1, $json->{file_results}->{'t/abc.t'}->{output_file});
@@ -63,7 +65,7 @@ Test {
       ok $x[2], $x[2];
     } $c;
   });
-} n => 30, name => 'ok';
+} n => 32, name => 'ok';
 
 Test {
   my $c = shift;
@@ -103,8 +105,8 @@ Test {
         is $r->{result}->{exit_code}, 0;
         ok $r->{result}->{ok};
         push @x, $return->{file_out}->(1, $r->{output_file});
-        is $r->{run}->[0], 'perl';
-        is $r->{run}->[1], '-e';
+        is $r->{command}->[0], 'perl';
+        is $r->{command}->[1], '-e';
       }
       {
         my $r = $json->{other_results}->{'before-1'};
@@ -116,8 +118,8 @@ Test {
         ok $r->{result}->{completed};
         is $r->{result}->{exit_code}, 0;
         ok $r->{result}->{ok};
-        is $r->{run}->[0], 'bash';
-        is $r->{run}->[1], '-c';
+        is $r->{command}->[0], 'bash';
+        is $r->{command}->[1], '-c';
         push @x, $return->{file_out}->(1, $r->{output_file});
       }
       push @x, $return->{file_out}->(1, $json->{file_results}->{'t/abc.t'}->{output_file});
@@ -179,11 +181,14 @@ Test {
         is $r->{result}->{exit_code}, undef;
         ok ! $r->{result}->{ok};
         is $r->{error}->{message}, "Failed before this test";
+        is $r->{command}->[0], 'bash';
+        is $r->{current_try_count}, 1;
+        is $r->{max_try_count}, 1;
       }
       is 0+keys %{$json->{file_results}}, 0;
     } $c;
   });
-} n => 29, name => 'not ok';
+} n => 32, name => 'not ok';
 
 Test {
   my $c = shift;

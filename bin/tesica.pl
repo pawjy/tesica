@@ -123,6 +123,21 @@ the C<after> commands), if it is running.
 A C<KILL> signal is sent to the command after 10 seconds from the
 C<TERM> signal, if it is still running.
 
+=item check : Boolean
+
+If true and the C<Run> object is used as a C<before> command, the
+command is repeated until it exits with zero (0).
+
+=item interval : Integer?
+
+The interval between retries in seconds.  Defaulted to 1 s.  Only
+applicable when C<check> is true.
+
+=item max_retries : Integer?
+
+The maximum number of retries upon failures.  Defaulted to zero.  Only
+applicable when C<check> is true.
+
 =item run : String | Array<String>
 
 The command to execute.  If a string is specified, it is executed by
@@ -263,6 +278,13 @@ An Array of the files of the test scripts.
 An Object whose names are the paths of the test scripts and values are
 corresponding results.
 
+=item other_results : Object<String, FileResult>
+
+An Object whose names are a short string identifying a command
+execution and values are corresponding results.
+
+Results for C<before> and C<after> commands are put into this Object.
+
 =item result : Result
 
 The result of the entire test, referred to as "global result".
@@ -349,6 +371,14 @@ name/value pairs:
 
 =over 4
 
+=item command : Array<String>
+
+The command executed, with the arguments.
+
+=item current_try_count : Integer
+
+The number of executions of this command, including the current run.
+
 =item error : Error?
 
 The error of the process of the test script, if any.
@@ -356,6 +386,10 @@ The error of the process of the test script, if any.
 =item executor : Executor?
 
 The description of the test executor used for the test script, if any.
+
+=item max_try_count : Integer
+
+The maximum number of allowed executions of this command.
 
 =item times : Times
 
@@ -429,9 +463,9 @@ the preliminary result.  Their values might be updated later.
 
 =item exit_code : Integer?
 
-The exit code of the process, if a process is executed.  The exit code
-of the Unix process, if the process is a Unix process.  E.g. zero if
-there is no problem detected.
+The exit status of the process, if a process is executed.  The exit
+code of the Unix process, if the process is a Unix process.  E.g. zero
+if there is no problem detected.
 
 =item fail : Integer?
 
@@ -516,10 +550,10 @@ C<TESICA_MANIFEST_FILE>: See L</TEST MANIFEST FILE>.
 
 =head1 EXIT STATUS
 
-When all tests passes, the C<tesica> process returns 0 (zero).
+When all tests passes, the C<tesica> process returns zero (0).
 
 When one or more tests fails, or one or more of commands specified in
-C<before> fails, the C<tesica> process returns 1 (one).
+C<before> fails, the C<tesica> process returns one (1).
 
 =head1 AUTHOR
 

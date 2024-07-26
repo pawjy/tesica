@@ -57,8 +57,8 @@ Test {
         ok $r->{result}->{completed};
         is $r->{result}->{exit_code}, 0;
         ok $r->{result}->{ok};
-        is $r->{run}->[0], 'bash';
-        is $r->{run}->[1], '-c';
+        is $r->{command}->[0], 'bash';
+        is $r->{command}->[1], '-c';
         push @x, $return->{file_out}->(1, $r->{output_file});
       }
       {
@@ -72,8 +72,8 @@ Test {
         isnt $r->{result}->{exit_code}, 0;
         ok ! $r->{result}->{ok};
         is $r->{error}->{message}, 'Command |perl|: Exit with signal 9';
-        is $r->{run}->[0], 'perl';
-        is $r->{run}->[1], '-e';
+        is $r->{command}->[0], 'perl';
+        is $r->{command}->[1], '-e';
         my $f = $return->{file_out}->(1, $r->{output_file});
         like $f, qr/^\s*([0-9.]+)\s+SIGTERM\s+([0-9.]+)\s*$/s;
         $f =~ /^\s*([0-9.]+)\s+SIGTERM\s+([0-9.]+)\s*$/s;
@@ -134,8 +134,8 @@ Test {
       {
         my $r = $json->{other_results}->{'before-2'};
         is $r->{type}, 'before';
-        is $r->{run}->[0], 'bash';
-        is $r->{run}->[1], '-c';
+        is $r->{command}->[0], 'bash';
+        is $r->{command}->[1], '-c';
       }
       {
         my $r = $json->{other_results}->{'background-1'};
@@ -148,8 +148,8 @@ Test {
         isnt $r->{result}->{exit_code}, 0;
         ok ! $r->{result}->{ok};
         is $r->{error}->{message}, 'Command |bash|: Exit code 127';
-        is $r->{run}->[0], 'bash';
-        is $r->{run}->[1], '-c';
+        is $r->{command}->[0], 'bash';
+        is $r->{command}->[1], '-c';
         ok ! $return->{file_out}->(1, $r->{output_file});
       }
     } $c;
@@ -211,8 +211,8 @@ Test {
         ok $r->{result}->{completed};
         is $r->{result}->{exit_code}, 0;
         ok $r->{result}->{ok};
-        is $r->{run}->[0], 'bash';
-        is $r->{run}->[1], '-c';
+        is $r->{command}->[0], 'bash';
+        is $r->{command}->[1], '-c';
         push @x, $return->{file_out}->(1, $r->{output_file});
       }
       {
@@ -226,8 +226,8 @@ Test {
         isnt $r->{result}->{exit_code}, 0;
         ok ! $r->{result}->{ok};
         is $r->{error}->{message}, 'Command |perl|: Exit with signal 9';
-        is $r->{run}->[0], 'perl';
-        is $r->{run}->[1], '-e';
+        is $r->{command}->[0], 'perl';
+        is $r->{command}->[1], '-e';
         my $f = $return->{file_out}->(1, $r->{output_file});
         like $f, qr/^\s*([0-9.]+)\s+SIGTERM\s+([0-9.]+)\s*$/s;
         $f =~ /^\s*([0-9.]+)\s+SIGTERM\s+([0-9.]+)\s*$/s;

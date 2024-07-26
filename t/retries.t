@@ -120,13 +120,19 @@ Test {
       ok ! $json->{file_results}->{'t/def.t'}->{tries}->[0]->{result}->{ok};
       is $json->{file_results}->{'t/def.t'}->{tries}->[0]->{error}->{message}, 'Command |perl|: Exit code 1';
       is $json->{file_results}->{'t/def.t'}->{tries}->[0]->{tries}, undef;
+      is $json->{file_results}->{'t/def.t'}->{tries}->[0]->{current_try_count}, 1;
+      is $json->{file_results}->{'t/def.t'}->{tries}->[0]->{max_try_count}, 2;
+      is $json->{file_results}->{'t/def.t'}->{current_try_count}, 2;
+      is $json->{file_results}->{'t/def.t'}->{max_try_count}, 2;
       
       ok $json->{file_results}->{'t/ghi.t'}->{result}->{ok};
       is $json->{file_results}->{'t/ghi.t'}->{error}, undef;
       is $json->{file_results}->{'t/ghi.t'}->{tries}, undef;
+      is $json->{file_results}->{'t/ghi.t'}->{current_try_count}, 1;
+      is $json->{file_results}->{'t/ghi.t'}->{max_try_count}, 2;
     } $c;
   });
-} n => 22, name => 'one-time failure';
+} n => 28, name => 'one-time failure';
 
 Test {
   my $c = shift;
@@ -160,6 +166,8 @@ Test {
       ok $json->{file_results}->{'t/abc.t'}->{result}->{ok};
       is $json->{file_results}->{'t/abc.t'}->{error}, undef;
       is $json->{file_results}->{'t/abc.t'}->{tries}, undef;
+      is $json->{file_results}->{'t/abc.t'}->{current_try_count}, 1;
+      is $json->{file_results}->{'t/abc.t'}->{max_try_count}, 3;
 
       ok ! $json->{file_results}->{'t/def.t'}->{result}->{ok};
       is $json->{file_results}->{'t/def.t'}->{error}->{message}, 'Command |perl|: Exit code 1';
@@ -178,7 +186,7 @@ Test {
       is $json->{file_results}->{'t/mno.t'}->{tries}, undef;
     } $c;
   });
-} n => 24, name => 'permanent failure and consecutive errors';
+} n => 26, name => 'permanent failure and consecutive errors';
 
 run_tests;
 

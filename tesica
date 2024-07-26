@@ -21979,6 +21979,10 @@ $fatpacked{"Main.pm"} = '#line '.(1+__LINE__).' "'.__FILE__."\"\n".<<'MAIN';
         return $output_w->close;
       })->then (sub {
         $env->{write_result}->();
+        if ($need_retry and $args{interval}) {
+          return promised_sleep $args{interval};
+        }
+      })->then (sub {
         return not $need_retry;
       });
     };
@@ -22073,7 +22077,13 @@ $fatpacked{"Main.pm"} = '#line '.(1+__LINE__).' "'.__FILE__."\"\n".<<'MAIN';
           printf STDERR "%d/%d [%s] |%s|...",
               $n, $count, $fr->{executor}->{type}, $file_name;
         }
-  
+          $fr->{current_try_count} = $try;
+          $fr->{max_try_count} = $max_retry_count + 1;
+          $fr->{command} = [
+            @{$xenv->{perl_command}},
+            $file->{path},
+          ];
+          
           my $escaped_name = $file_name;
           $escaped_name =~ s{([^A-Za-z0-9])}{sprintf '_%02X', ord $1}ge;
         my $output_path = $env->{result_dir_path}->child ('files');
@@ -22142,13 +22152,17 @@ $fatpacked{"Main.pm"} = '#line '.(1+__LINE__).' "'.__FILE__."\"\n".<<'MAIN';
           $e->{run} = ['bash', '-c', $e->{run}];
         }
   
-        my $escaped_name = ($e->{background} ? 'background' : "before") . "-".$i++;
+        my $escaped_name = ($e->{check} ? 'check' : $e->{background} ? 'background' : "before") . "-".$i++;
         my $fr = $result->{other_results}->{$escaped_name} = {
-          type => ($e->{background} ? 'background' : 'before'),
+          type => ($e->{check} ? 'check' : $e->{background} ? 'background' : 'before'),
           result => {ok => 0},
           times => {start => time},
-          run => $e->{run},
+          command => $e->{run},
+          current_try_count => 1,
         };
+  
+        my $max_try_count = $fr->{max_try_count} = $e->{check} ? 1+($e->{max_retries} || 99) : 1;
+        my $interval = 0+($e->{interval} || 1);
   
         if ($failed) {
           $fr->{times}->{end} = $fr->{times}->{start};
@@ -22162,8 +22176,11 @@ $fatpacked{"Main.pm"} = '#line '.(1+__LINE__).' "'.__FILE__."\"\n".<<'MAIN';
           command => $e->{run},
           with_tails => ! $e->{background},
           before_try => sub {
+            my $try = $_[0];
             my $output_path = $env->{result_dir_path}->child ('files')->child ($escaped_name . '.txt');
             $fr->{output_file} = ''.$output_path->relative ($env->{result_dir_path});
+            $fr->{current_try_count} = $try;
+            $fr->{max_try_count} = $max_try_count;
             return $output_path;
           }, # before_try
           pass => sub {
@@ -22175,16 +22192,29 @@ $fatpacked{"Main.pm"} = '#line '.(1+__LINE__).' "'.__FILE__."\"\n".<<'MAIN';
             $fr->{result}->{completed} = 1;
           }, # pass
           fail => sub {
-            my ($try, $e) = @_;
+            my ($try, $err) = @_;
             $fr->{times}->{end} //= time;
-            $fr->{error}->{message} = ''.$e;
+            $fr->{error}->{message} = ''.$err;
             $fr->{result}->{completed} = 1;
-            $failed = 1;
-            return 0; # permanent failure, no retry
+            if ($e->{check} and $try < $max_try_count) {
+              $fr = $result->{other_results}->{$escaped_name} = {
+                type => ($e->{check} ? 'check' : $e->{background} ? 'background' : 'before'),
+                result => {ok => 0},
+                times => {start => time},
+                command => $e->{run},
+                current_try_count => $try,
+                max_try_count => $max_try_count,
+              };
+              return 1;
+            } else {
+              $failed = 1;
+              return 0; # permanent failure, no retry
+            }
           }, # fail
           signal => $ac->signal,
+          interval => $interval,
         );
-        if ($e->{background}) {
+        if ($e->{background} and not $e->{check}) {
           push @{$env->{backgrounds}}, [$p, $ac];
         } else {
           return $p;
@@ -22221,15 +22251,18 @@ $fatpacked{"Main.pm"} = '#line '.(1+__LINE__).' "'.__FILE__."\"\n".<<'MAIN';
           type => 'after',
           result => {ok => 0},
           times => {start => time},
-          run => $e->{run},
+          command => $e->{run},
         };
   
         return run_command (
           $env,
           command => $e->{run},
           before_try => sub {
+            my $try = $_[0];
             my $output_path = $env->{result_dir_path}->child ('files')->child ($escaped_name . '.txt');
             $fr->{output_file} = ''.$output_path->relative ($env->{result_dir_path});
+            $fr->{current_try_count} = $try;
+            $fr->{max_try_count} = 1;
             return $output_path;
           }, # before_try
           pass => sub {
@@ -22267,6 +22300,7 @@ $fatpacked{"Main.pm"} = '#line '.(1+__LINE__).' "'.__FILE__."\"\n".<<'MAIN';
                              pass_after_retry => 0},
                   rule => {entangled_logs => {}},
                   times => {start => time},
+                  other_results => {},
                   file_results => {}, executors => {}};
   
     $result->{rule}->{envs} = {%ENV};
@@ -33558,6 +33592,33 @@ A C<Run> object is a JSON object with following name/value pairs:
 
 =over 4
 
+=item background : Boolean
+
+If true and the C<Run> object is used as a C<before> command, the
+following C<before> commands, as well as tests, are executed without
+waiting for the completion of this command.
+
+A C<TERM> signal is sent to the command after the tests (but before
+the C<after> commands), if it is running.
+
+A C<KILL> signal is sent to the command after 10 seconds from the
+C<TERM> signal, if it is still running.
+
+=item check : Boolean
+
+If true and the C<Run> object is used as a C<before> command, the
+command is repeated until it exits with zero (0).
+
+=item interval : Integer?
+
+The interval between retries in seconds.  Defaulted to 1 s.  Only
+applicable when C<check> is true.
+
+=item max_retries : Integer?
+
+The maximum number of retries upon failures.  Defaulted to zero.  Only
+applicable when C<check> is true.
+
 =item run : String | Array<String>
 
 The command to execute.  If a string is specified, it is executed by
@@ -33698,6 +33759,13 @@ An Array of the files of the test scripts.
 An Object whose names are the paths of the test scripts and values are
 corresponding results.
 
+=item other_results : Object<String, FileResult>
+
+An Object whose names are a short string identifying a command
+execution and values are corresponding results.
+
+Results for C<before> and C<after> commands are put into this Object.
+
 =item result : Result
 
 The result of the entire test, referred to as "global result".
@@ -33784,6 +33852,14 @@ name/value pairs:
 
 =over 4
 
+=item command : Array<String>
+
+The command executed, with the arguments.
+
+=item current_try_count : Integer
+
+The number of executions of this command, including the current run.
+
 =item error : Error?
 
 The error of the process of the test script, if any.
@@ -33791,6 +33867,10 @@ The error of the process of the test script, if any.
 =item executor : Executor?
 
 The description of the test executor used for the test script, if any.
+
+=item max_try_count : Integer
+
+The maximum number of allowed executions of this command.
 
 =item times : Times
 
@@ -33864,9 +33944,9 @@ the preliminary result.  Their values might be updated later.
 
 =item exit_code : Integer?
 
-The exit code of the process, if a process is executed.  The exit code
-of the Unix process, if the process is a Unix process.  E.g. zero if
-there is no problem detected.
+The exit status of the process, if a process is executed.  The exit
+code of the Unix process, if the process is a Unix process.  E.g. zero
+if there is no problem detected.
 
 =item fail : Integer?
 
@@ -33951,10 +34031,10 @@ C<TESICA_MANIFEST_FILE>: See L</TEST MANIFEST FILE>.
 
 =head1 EXIT STATUS
 
-When all tests passes, the C<tesica> process returns 0 (zero).
+When all tests passes, the C<tesica> process returns zero (0).
 
 When one or more tests fails, or one or more of commands specified in
-C<before> fails, the C<tesica> process returns 1 (one).
+C<before> fails, the C<tesica> process returns one (1).
 
 =head1 AUTHOR
 
