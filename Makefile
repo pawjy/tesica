@@ -111,7 +111,7 @@ test-deps: deps
 test-main: test-main-files test-main-compiled
 
 test-main-files:
-	$(PROVE) t/*.t
+	TEST_SHOW_OUTPUT=$$CI $(PROVE) t/*.t
 
 test-main-compiled:
 	TEST_COMPILED_TESICA=1 $(PROVE) t/*.t
