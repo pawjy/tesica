@@ -239,10 +239,6 @@ Test {
       ok $x[4] < $x[3], $x[2];
       ok $x[3] < $x[1], $x[3];
       ok $x[4], $x[4];
-
-      # XXX
-      use Data::Dumper;
-      warn Dumper $json;
     } $c;
   });
 } n => 44, name => 'after';
