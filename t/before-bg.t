@@ -238,9 +238,10 @@ Test {
       ok $x[2] < $x[4], $x[1];
       ok $x[4] < $x[3], $x[2];
       ok $x[3] < $x[1], $x[3];
+      ok $x[4], $x[4];
     } $c;
   });
-} n => 43, name => 'after';
+} n => 44, name => 'after';
 
 run_tests;
 
