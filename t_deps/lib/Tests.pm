@@ -160,6 +160,7 @@ sub run (%) {
       warn $stdout;
       warn "STDERR:\n";
       warn $stderr;
+      warn "Result: $result\n";
     }
 
     $return->{file_bytes} = sub {
