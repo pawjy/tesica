@@ -68,6 +68,13 @@ sub set_result_rule ($) {
           if defined $envs->{CIRCLE_BUILD_URL};
     }
   }
+
+  if (defined $envs->{CIRCLE_NODE_TOTAL} and
+      $envs->{CIRCLE_NODE_TOTAL} > 1 and
+      defined $envs->{CIRCLE_NODE_INDEX}) {
+    $result->{rule}->{circle_node_total} = 0+$envs->{CIRCLE_NODE_TOTAL};
+    $result->{rule}->{circle_node_index} = 0+$envs->{CIRCLE_NODE_INDEX};
+  }
 } # set_result_rule
 
 sub path_full ($) {
@@ -215,6 +222,27 @@ sub filter_files ($$) {
     ($pri->{$b->{path}} || 0) <=> ($pri->{$a->{path}} || 0) ||
     $a->{path} cmp $b->{path};
   } @$out_files];
+
+  {
+    my $node_total = $ENV{CIRCLE_NODE_TOTAL};
+    my $node_index = $ENV{CIRCLE_NODE_INDEX};
+    if (defined $node_total and $node_total > 1 and defined $node_index) {
+      $node_total = 0+$node_total;
+      $node_index = 0+$node_index;
+      my $i = 0;
+      for my $file (@$out_files) {
+        if (!$file->{error}) {
+          if (($i % $node_total) != $node_index) {
+            $file->{error} = {message => 'Skipped by CIRCLE_NODE_INDEX', ignored => 1};
+            $file->{time} = time;
+          }
+          $i++;
+        } elsif (!$file->{error}->{ignored}) {
+          $i++;
+        }
+      }
+    }
+  }
   
   return $out_files;
 } # filter_files
@@ -461,7 +489,7 @@ sub process_files ($$$) {
     if ($file->{error}) {
       $fr->{times}->{end} = $fr->{times}->{start} = $file->{time};
       $fr->{error} = $file->{error};
-      if ($file->{error}->{message} eq 'Skipped by request') {
+      if ($file->{error}->{ignored}) {
         $result->{result}->{skipped}++;
       } else {
         $result->{result}->{fail}++;
@@ -890,7 +918,7 @@ sub main ($@) {
 
 =head1 LICENSE
 
-Copyright 2018-2024 Wakaba <wakaba@suikawiki.org>.
+Copyright 2018-2026 Wakaba <wakaba@suikawiki.org>.
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself.

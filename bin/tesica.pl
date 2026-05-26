@@ -546,6 +546,14 @@ The number of the skipped tests within the process, if known.
 
 C<CIRCLE_ARTIFACTS>: See L</TEST RESULTS>.
 
+C<CIRCLE_NODE_TOTAL>: The total number of nodes among which test files
+are split.  Together with C<CIRCLE_NODE_INDEX>, this tells tesica
+which subset of files to run.  It is expected that tesica is invoked
+on each node with a different C<CIRCLE_NODE_INDEX> value.
+
+C<CIRCLE_NODE_INDEX>: The zero-based index of the current node.  Used
+together with C<CIRCLE_NODE_TOTAL>.
+
 C<TESICA_MANIFEST_FILE>: See L</TEST MANIFEST FILE>.
 
 =head1 EXIT STATUS
@@ -559,6 +567,10 @@ C<before> fails, the C<tesica> process returns one (1).
 
 Wakaba <wakaba@suikawiki.org>.
 
+=head1 ACKNOWLEDGEMENTS
+
+Thanks to jkondo.
+
 =head1 HISTORY
 
 This Git repository was located at <https://github.com/wakaba/tesica>
@@ -566,7 +578,7 @@ until 14 March, 2022.
 
 =head1 LICENSE
 
-Copyright 2018-2024 Wakaba <wakaba@suikawiki.org>.
+Copyright 2018-2026 Wakaba <wakaba@suikawiki.org>.
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself.
